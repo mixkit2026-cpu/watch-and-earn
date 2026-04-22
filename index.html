@@ -1,0 +1,3010 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>USDT Click</title>
+
+    <!-- FIX: Error Suppression Script (Moved to Top for Priority) -->
+    <script>
+        (function () {
+            // 1. Suppress specific Console Errors
+            const originalError = console.error;
+            console.error = function (...args) {
+                // Convert all args to string to check content safely
+                const msg = args.map(arg => {
+                    try {
+                        return String(arg);
+                    } catch (e) {
+                        return '';
+                    }
+                }).join(' ');
+
+                if (msg.includes('CloudStorage') || msg.includes('adex timeout') || msg.includes('Telegram is not defined')) {
+                    return;
+                }
+                originalError.apply(console, args);
+            };
+
+            // 2. Global Handler for Unhandled Rejections (Ad timeouts)
+            // Added { capture: true } to intercept errors as early as possible
+            window.addEventListener('unhandledrejection', function (event) {
+                event.preventDefault(); // Prevents the browser from logging it as a red error
+
+                let msg = '';
+                try {
+                    if (event.reason) {
+                        if (typeof event.reason === 'object') {
+                            // Combine message and stack to catch everything
+                            msg = (event.reason.message || '') + ' ' + (event.reason.stack || '') + ' ' + event.reason.toString();
+                        } else {
+                            msg = String(event.reason);
+                        }
+                    }
+                } catch (e) { }
+
+                // Aggressively suppress adex timeout and other ad-related noises
+                if (msg.includes('adex timeout') || msg.includes('timeout') || msg.includes('monetag')) {
+                    return; // Silently ignore
+                }
+
+                // Suppress Performance API missing marks
+                if (msg.includes('mark') && msg.includes('does not exist')) {
+                    return; // Silently ignore
+                }
+
+                // For other errors, we let the default behavior happen (or log warning if needed)
+            }, { capture: true });
+
+            // 3. Patch performance.measure
+            if (window.performance && window.performance.measure) {
+                const originalMeasure = window.performance.measure;
+                window.performance.measure = function (name, startMark, endMark) {
+                    try {
+                        return originalMeasure.apply(window.performance, arguments);
+                    } catch (e) {
+                        if (e.name === 'SyntaxError' && e.message.includes('mark')) {
+                            return;
+                        }
+                    }
+                };
+            }
+        })();
+    </script>
+
+    <!-- 1. Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- 2. Telegram Web App SDK -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+    <!-- 3. MONETAG SDK SCRIPT -->
+    <script src='//libtl.com/sdk.js' data-zone='YOUR_MONETAG_ZONE_ID' data-sdk='show_YOUR_MONETAG_ZONE_ID'></script>
+
+    <!-- 4. RICHADS TELEGRAM ADS SDK (Embedded Banner) -->
+    <script src="https://richinfo.co/richpartners/telegram/js/tg-ob.js"></script>
+    <script>
+        // Initialize RichPartners Telegram Ads
+        (function() {
+            try {
+                window.TelegramAdsController = new TelegramAdsController();
+                window.TelegramAdsController.initialize({
+                    pubId: "YOUR_RICHADS_PUB_ID",
+                    appId: "YOUR_RICHADS_APP_ID",
+                });
+                console.log("RichAds SDK initialized successfully");
+            } catch (e) {
+                console.warn("RichAds SDK initialization error:", e);
+            }
+        })();
+    </script>
+
+    <!-- 5. FIREBASE SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-auth.js";
+        import { getFirestore, doc, setDoc, addDoc, collection, onSnapshot, getDoc, getDocs, increment, arrayUnion, runTransaction } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
+
+        // ✨ YOUR FIREBASE CONFIGURATION
+        const firebaseConfig = {
+            apiKey: "AIzaSyDmDsRoWWAA_P4msOZbRGna6f-BO7znPHM",
+            authDomain: "watch-and-earn-2026.firebaseapp.com",
+            projectId: "watch-and-earn-2026",
+            storageBucket: "watch-and-earn-2026.firebasestorage.app",
+            messagingSenderId: "620164694284",
+            appId: "1:620164694284:web:bf2b45f35586ab60af0929"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // Bot tokens - will be fetched from Firebase
+        let REFERRAL_BOT_TOKEN = null;
+        let ADMIN_BOT_TOKEN = null;
+        let ADMIN_CHAT_ID = null;
+
+        // App ID for public collections
+        const appId = "your-app-id";
+
+        // --- AUTH & DATA LOGIC ---
+
+        signInAnonymously(auth).catch((error) => {
+            console.error("Auth failed:", error);
+        });
+
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                initGameData(user);
+            }
+        });
+
+        function initGameData(user) {
+            let telegramUserId;
+            let firstName = "Player";
+            let username = "Unknown";
+            let photoUrl = null;
+
+            // Session State
+            let sessionData = {
+                score: 0,
+                dailyTaps: 0,
+                dailyInterstitialUses: 0,
+                dailyPopupUses: 0,
+                lastResetDate: new Date().toDateString(),
+                withdrawHistory: [], // To store history locally for UI
+                // Referral fields
+                referredBy: null,
+                referralCount: 0,
+                referralEarnings: 0,
+                referrals: [],
+                milestone10kClaimed: []
+            };
+
+            // Check for referral parameter from startapp
+            let referrerIdFromLink = null;
+            try {
+                const startParam = Telegram.WebApp.initDataUnsafe.start_param;
+                if (startParam && startParam.startsWith('ref_')) {
+                    referrerIdFromLink = startParam.replace('ref_', '');
+                    console.log('Referral detected from:', referrerIdFromLink);
+                }
+            } catch (e) {
+                console.warn('Could not read start_param:', e);
+            }
+
+            // Local flags to prevent excessive operations
+            let milestone10kChecked = false;
+            let milestone10kCredited = false;
+            let newUserReferralProcessed = false; // Prevent duplicate referral credit calls
+
+            // ✨ STRICT TELEGRAM CHECK
+            try {
+                if (typeof Telegram === 'undefined' || !Telegram.WebApp) {
+                    throw new Error("Telegram SDK not loaded");
+                }
+
+                const tgUser = Telegram.WebApp.initDataUnsafe.user;
+
+                if (!tgUser || !tgUser.id) {
+                    console.warn("No Telegram User detected. Blocking access.");
+                    document.getElementById('loading-screen').classList.add('hidden');
+                    document.getElementById('blocker-screen').classList.remove('hidden');
+                    return;
+                }
+
+                telegramUserId = tgUser.id.toString();
+                firstName = tgUser.first_name || "Player";
+                username = tgUser.username ? `@${tgUser.username}` : "No Username";
+                photoUrl = tgUser.photo_url || null;
+
+            } catch (e) {
+                console.warn("Access Restricted: Not in Telegram environment.");
+                document.getElementById('loading-screen').classList.add('hidden');
+                document.getElementById('blocker-screen').classList.remove('hidden');
+                return;
+            }
+
+            window.currentUserInfo = {
+                id: telegramUserId,
+                name: firstName,
+                username: username,
+                photoUrl: photoUrl
+            };
+
+            // Create session link between Firebase UID and Telegram ID (for security rules)
+            // Overwrites previous session (deletes old Firebase UID link for security)
+            const sessionRef = doc(db, 'users', telegramUserId, 'auth', 'session');
+            setDoc(sessionRef, {
+                firebaseUid: user.uid,
+                telegramId: telegramUserId,
+                lastAuth: new Date().toISOString()
+            }).catch(e => console.warn("Session link warning:", e));
+
+            const userDocRef = doc(db, 'users', telegramUserId, 'game_data', 'score_info');
+
+            onSnapshot(userDocRef, (docSnap) => {
+                // ✨ HIDE LOADING SCREEN ON FIRST LOAD
+                const loadingScreen = document.getElementById('loading-screen');
+                const screensContainer = document.getElementById('screens-container');
+                const profileBtn = document.getElementById('profile-btn');
+                const bottomNav = document.getElementById('bottom-nav');
+
+                if (loadingScreen && !loadingScreen.classList.contains('hidden')) {
+                    loadingScreen.classList.add('hidden');
+                    screensContainer.classList.remove('hidden');
+                    profileBtn.classList.remove('hidden');
+                    bottomNav.classList.remove('hidden');
+                    // Show play screen by default
+                    showScreen('play');
+                }
+
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    const today = new Date().toDateString();
+
+                    // ALWAYS preserve user's total score from database first
+                    // This ensures score is NEVER lost during any reset
+                    sessionData.score = data.score || sessionData.score || 0;
+
+                    // Check if we need to reset daily limits (midnight reset)
+                    // NOTE: Only daily limits reset, NOT the total score
+                    if (data.lastResetDate !== today) {
+                        sessionData.dailyTaps = 0;
+                        sessionData.dailyInterstitialUses = 0;
+                        sessionData.dailyPopupUses = 0;
+                        sessionData.lastResetDate = today;
+                    } else {
+                        // Load daily limits from database
+                        sessionData.dailyTaps = data.dailyTaps || 0;
+                        sessionData.dailyInterstitialUses = data.dailyInterstitialUses || 0;
+                        sessionData.dailyPopupUses = data.dailyPopupUses || 0;
+                        sessionData.lastResetDate = data.lastResetDate || today;
+                    }
+
+                    // Load history if available
+                    if (data.withdrawHistory) {
+                        sessionData.withdrawHistory = data.withdrawHistory;
+                    }
+
+                    // Load completed tasks if available
+                    if (data.completedTasks) {
+                        sessionData.completedTasks = data.completedTasks;
+                    }
+
+                    // Load referral data
+                    sessionData.referredBy = data.referredBy || null;
+                    sessionData.referralCount = data.referralCount || 0;
+                    sessionData.referralEarnings = data.referralEarnings || 0;
+                    sessionData.referrals = data.referrals || [];
+                    sessionData.milestone10kClaimed = data.milestone10kClaimed || [];
+
+                    // Update profile info for existing users (ensures photoUrl is always current)
+                    if (data.photoUrl !== photoUrl || data.name !== firstName || data.username !== username) {
+                        setDoc(userDocRef, {
+                            name: firstName,
+                            username: username,
+                            photoUrl: photoUrl
+                        }, { merge: true });
+                    }
+
+                    window.updateGameState(sessionData);
+                } else {
+                    // NEW USER - Check if they were referred
+                    // Only process referral once per session
+                    if (!newUserReferralProcessed) {
+                        newUserReferralProcessed = true;
+
+                        let referredByUserId = null;
+                        if (referrerIdFromLink && referrerIdFromLink !== telegramUserId) {
+                            referredByUserId = referrerIdFromLink;
+                            // Credit the referrer with 400 coins
+                            creditReferrer(referrerIdFromLink, telegramUserId, firstName);
+                        }
+
+                        setDoc(userDocRef, {
+                            score: 0,
+                            dailyTaps: 0,
+                            dailyInterstitialUses: 0,
+                            dailyPopupUses: 0,
+                            lastResetDate: new Date().toDateString(),
+                            withdrawHistory: [],
+                            completedTasks: [],
+                            referredBy: referredByUserId,
+                            referralCount: 0,
+                            referralEarnings: 0,
+                            referrals: [],
+                            milestone10kClaimed: [],
+                            telegramId: telegramUserId,
+                            name: firstName,
+                            username: username,
+                            photoUrl: photoUrl,
+                            createdAt: new Date().toISOString()
+                        }, { merge: true }).catch(err => console.error("Error creating doc:", err));
+                    }
+                }
+            }, (error) => {
+                console.error("Firestore Snapshot Error:", error);
+                document.getElementById('loading-screen').classList.add('hidden');
+                document.getElementById('screens-container').classList.remove('hidden');
+                showScreen('play');
+                window.updateGameState(sessionData);
+            });
+
+            window.saveDataLocally = function (key, value) {
+                sessionData[key] = value;
+            };
+
+            // Sync entire gameState from main script to sessionData
+            window.syncGameState = function (fullGameState) {
+                if (fullGameState) {
+                    // Merge all gameState properties into sessionData
+                    Object.keys(fullGameState).forEach(key => {
+                        sessionData[key] = fullGameState[key];
+                    });
+                }
+            };
+
+            const saveFinalScore = () => {
+                // Sync gameState before final save
+                if (typeof window.getGameState === 'function') {
+                    const currentGameState = window.getGameState();
+                    if (currentGameState) {
+                        Object.keys(currentGameState).forEach(key => {
+                            sessionData[key] = currentGameState[key];
+                        });
+                    }
+                }
+                
+                setDoc(userDocRef, {
+                    ...sessionData,
+                    name: firstName,
+                    username: username,
+                    photoUrl: photoUrl,
+                    lastActive: new Date().toISOString()
+                }, { merge: true }).catch(e => console.error("Final save failed:", e));
+            };
+
+            // ✨ EXPOSE SAVE FUNCTION FOR WITHDRAWAL
+            window.forceDatabaseSave = function (newData) {
+                // Sync gameState from main script first
+                if (typeof window.getGameState === 'function') {
+                    const currentGameState = window.getGameState();
+                    if (currentGameState) {
+                        Object.keys(currentGameState).forEach(key => {
+                            sessionData[key] = currentGameState[key];
+                        });
+                    }
+                }
+                
+                // Merge new data into session
+                sessionData = { ...sessionData, ...newData };
+                // Force push to DB
+                return setDoc(userDocRef, {
+                    ...sessionData,
+                    lastActive: new Date().toISOString()
+                }, { merge: true });
+            };
+
+            // ✨ EXPOSE CREATE WITHDRAWAL FUNCTION
+            window.createWithdrawalRequest = async function (withdrawDetails) {
+                try {
+                    // Create in Public "withdraws" collection for Admin to see
+                    // Path: artifacts/{appId}/public/data/withdraws
+                    const withdrawsColl = collection(db, 'withdrawals');
+                    await addDoc(withdrawsColl, {
+                        ...withdrawDetails,
+                        timestamp: new Date().toISOString()
+                    });
+                    return true;
+                } catch (e) {
+                    console.error("Failed to create withdrawal request:", e);
+                    return false;
+                }
+            };
+
+            // ✨ REFERRAL SYSTEM FUNCTIONS
+
+            // Credit referrer when new user joins (500 coins)
+            // Uses tracking document + session flag + Firestore transaction to prevent duplicates
+            let referralCreditInProgress = false;
+
+            async function creditReferrer(referrerId, newUserId, newUserName) {
+                // Prevent concurrent calls in same session
+                if (referralCreditInProgress) {
+                    console.log('Referral credit already in progress, skipping');
+                    return;
+                }
+                referralCreditInProgress = true;
+
+                try {
+                    const referralTrackRef = doc(db, 'users', referrerId, 'referral_credits', newUserId);
+                    const referrerDocRef = doc(db, 'users', referrerId, 'game_data', 'score_info');
+
+                    const credited = await runTransaction(db, async (transaction) => {
+                        const trackDoc = await transaction.get(referralTrackRef);
+                        if (trackDoc.exists()) {
+                            console.log(`Referral from ${newUserId} already credited to ${referrerId}`);
+                            return false; // Already credited
+                        }
+
+                        const referrerDoc = await transaction.get(referrerDocRef);
+                        if (!referrerDoc.exists()) {
+                            console.warn(`Referrer ${referrerId} does not exist, skipping credit`);
+                            return false;
+                        }
+
+                        // Create tracking document first (atomic within transaction)
+
+                        transaction.set(referralTrackRef, {
+                            creditedAt: new Date().toISOString(),
+                            newUserId: newUserId,
+                            newUserName: newUserName,
+                            amount: 400
+                        });
+
+                        // Atomic credit
+                        transaction.set(referrerDocRef, {
+                            score: increment(400),
+                            referralCount: increment(1),
+                            referralEarnings: increment(400),
+                            referrals: arrayUnion(newUserId)
+                        }, { merge: true });
+
+                        return true;
+                    });
+
+                    if (credited) {
+                        console.log(`Credited 400 coins to referrer ${referrerId} for new user ${newUserId}`);
+                        notifyReferrer(referrerId, newUserName, 400, 'join');
+                    }
+                } catch (e) {
+                    console.error('Error crediting referrer:', e);
+                } finally {
+                    referralCreditInProgress = false; // Always release lock
+                }
+            }
+
+            // Notify referrer via Telegram bot (uses separate Referral Bot)
+            async function notifyReferrer(referrerId, newUserName, coinsEarned, eventType) {
+                try {
+                    // Fetch bot tokens from Firebase if not already loaded
+                    if (!REFERRAL_BOT_TOKEN || !ADMIN_BOT_TOKEN) {
+                        const botConfigRef = doc(db, 'app_settings', 'bot_config');
+                        const botConfigDoc = await getDoc(botConfigRef);
+                        if (botConfigDoc.exists()) {
+                            const config = botConfigDoc.data();
+                            REFERRAL_BOT_TOKEN = config.referralBotToken;
+                            ADMIN_BOT_TOKEN = config.adminBotToken;
+                            ADMIN_CHAT_ID = config.adminChatId;
+                        }
+                    }
+
+                    if (!REFERRAL_BOT_TOKEN) {
+                        console.warn('Referral bot token not configured in Firebase (app_settings/bot_config/referralBotToken)');
+                        return;
+                    }
+
+                    // Sanitize user name for HTML
+                    const safeName = (newUserName || 'Someone').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+                    let message = '';
+                    if (eventType === 'join') {
+                        message = `
+🎉 <b>New Referral!</b>
+
+👤 Your friend <b>${safeName}</b> just joined using your link!
+💰 You earned <b>+${coinsEarned} coins</b>!
+
+Keep sharing to earn more! 🚀
+                        `.trim();
+                    } else if (eventType === '10k') {
+                        message = `
+🏆 <b>Milestone Bonus!</b>
+
+🎯 Your referral <b>${safeName}</b> reached 10,000 coins!
+💰 You earned <b>+${coinsEarned} coins</b> (10% bonus)!
+
+Great job bringing active users! 💪
+                        `.trim();
+                    } else if (eventType === 'withdraw') {
+                        message = `
+💸 <b>Withdrawal Bonus!</b>
+
+🏦 Your referral just made a withdrawal!
+💰 You earned <b>+${coinsEarned} coins</b> (1% commission)!
+
+Passive income flowing in! 💎
+                        `.trim();
+                    }
+
+                    const url = `https://api.telegram.org/bot${REFERRAL_BOT_TOKEN}/sendMessage`;
+                    await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            chat_id: referrerId,
+                            text: message,
+                            parse_mode: 'HTML'
+                        })
+                    })
+                } catch (e) {
+                    console.error('Error notifying referrer:', e);
+                }
+            }
+
+            // Credit referrer when referred user reaches 10k (1000 coins)
+            window.checkAndCredit10kMilestone = async function () {
+                // Skip if no referrer, score too low, or already checked/credited
+                if (!sessionData.referredBy) return;
+                if (sessionData.score < 10000) return;
+                if (milestone10kChecked) return; // Prevent multiple reads
+
+                milestone10kChecked = true; // Mark as checked to prevent repeated reads
+
+                try {
+                    const referrerDocRef = doc(db, 'users', sessionData.referredBy, 'game_data', 'score_info');
+                    const referrerDoc = await getDoc(referrerDocRef);
+
+                    if (referrerDoc.exists()) {
+                        const referrerData = referrerDoc.data();
+                        const claimedMilestones = referrerData.milestone10kClaimed || [];
+
+                        // Check if this milestone was already claimed
+                        if (!claimedMilestones.includes(telegramUserId)) {
+                            // Use atomic increment and arrayUnion for thread-safety
+                            await setDoc(referrerDocRef, {
+                                score: increment(1000),
+                                referralEarnings: increment(1000),
+                                milestone10kClaimed: arrayUnion(telegramUserId)
+                            }, { merge: true });
+                            milestone10kCredited = true;
+                            console.log(`Credited 1000 coins to referrer for 10k milestone`);
+
+                            // Notify referrer about 10k milestone
+                            notifyReferrer(sessionData.referredBy, firstName, 1000, '10k');
+                        } else {
+                            milestone10kCredited = true; // Already claimed, mark to prevent future checks
+                        }
+                    }
+                } catch (e) {
+                    console.error('Error crediting 10k milestone:', e);
+                    milestone10kChecked = false; // Allow retry on error
+                }
+            };
+
+            // Credit referrer on withdrawal (1% of coins)
+            window.creditReferrerOnWithdrawal = async function (withdrawalCoins) {
+                if (!sessionData.referredBy) return;
+
+                const referralBonus = Math.floor(withdrawalCoins * 0.01); // 1%
+                if (referralBonus <= 0) return;
+
+                try {
+                    const referrerDocRef = doc(db, 'users', sessionData.referredBy, 'game_data', 'score_info');
+
+                    // Use atomic increment - no need to read first
+                    await setDoc(referrerDocRef, {
+                        score: increment(referralBonus),
+                        referralEarnings: increment(referralBonus)
+                    }, { merge: true });
+                    console.log(`Credited ${referralBonus} coins (1%) to referrer for withdrawal`);
+
+                    // Notify referrer about withdrawal bonus
+                    notifyReferrer(sessionData.referredBy, firstName, referralBonus, 'withdraw');
+                } catch (e) {
+                    console.error('Error crediting referrer on withdrawal:', e);
+                }
+            };
+
+            // ✨ NOTIFY ADMIN ON WITHDRAWAL REQUEST
+            window.notifyAdminWithdrawal = async function (withdrawDetails) {
+                try {
+                    // Fetch admin bot config from Firebase if not already loaded
+                    if (!ADMIN_BOT_TOKEN || !ADMIN_CHAT_ID) {
+                        const botConfigRef = doc(db, 'app_settings', 'bot_config');
+                        const botConfigDoc = await getDoc(botConfigRef);
+                        if (botConfigDoc.exists()) {
+                            const config = botConfigDoc.data();
+                            ADMIN_BOT_TOKEN = config.adminBotToken;
+                            ADMIN_CHAT_ID = config.adminChatId;
+                        }
+                    }
+
+                    if (!ADMIN_BOT_TOKEN || !ADMIN_CHAT_ID) {
+                        console.warn('Admin bot config not set in Firebase (app_settings/bot_config)');
+                        return;
+                    }
+
+                    // Escape HTML special characters
+                    const escape = (str) => (str || 'Unknown').toString()
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;');
+
+                    const message = `
+💸 <b>New Withdrawal Request</b> 💸
+
+👤 <b>User:</b> ${escape(withdrawDetails.name)} (@${escape((withdrawDetails.username || '').replace('@', '') || 'No Username')})
+🆔 <b>TG ID:</b> <code>${escape(withdrawDetails.userId)}</code>
+💰 <b>Amount:</b> $${parseFloat(withdrawDetails.amountUsd || 0).toFixed(2)} USDT
+🪙 <b>Coins:</b> ${Number(withdrawDetails.amountCoins || 0).toLocaleString()}
+🏦 <b>Binance User ID:</b> <code>${escape(withdrawDetails.walletAddress)}</code>
+📅 <b>Date:</b> ${new Date().toLocaleString('en-US', { timeZone: 'UTC' })} UTC
+🤖 <b>Bot:</b> <a href="https://t.me/YOUR_BOT_USERNAME/YOUR_MINI_APP_SHORT_NAME">@YOUR_BOT_USERNAME</a>
+                    `.trim();
+
+                    await fetch(`https://api.telegram.org/bot${ADMIN_BOT_TOKEN}/sendMessage`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            chat_id: ADMIN_CHAT_ID,
+                            text: message,
+                            parse_mode: 'HTML',
+                            disable_web_page_preview: true
+                        })
+                    });
+                    console.log('✅ Admin notified of withdrawal request');
+                } catch (e) {
+                    console.error('Error notifying admin:', e);
+                }
+            };
+
+            // Get current user's referral link (updated to new mini app link)
+            window.getReferralLink = function () {
+                return `https://t.me/YOUR_BOT_USERNAME/YOUR_MINI_APP_SHORT_NAME?startapp=ref_${telegramUserId}`;
+            };
+
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'hidden') {
+                    saveFinalScore();
+                }
+            });
+
+            window.addEventListener("beforeunload", () => {
+                saveFinalScore();
+            });
+
+            // --- MIDNIGHT RESET TIMER ---
+            // Check every minute if the date has changed and reset daily limits
+            let lastCheckedDate = new Date().toDateString();
+
+            setInterval(() => {
+                const currentDate = new Date().toDateString();
+
+                if (currentDate !== lastCheckedDate) {
+                    lastCheckedDate = currentDate;
+
+                    // Reset daily limits
+                    sessionData.dailyTaps = 0;
+                    sessionData.dailyInterstitialUses = 0;
+                    sessionData.dailyPopupUses = 0;
+                    sessionData.lastResetDate = currentDate;
+
+                    // Update UI
+                    if (typeof window.updateGameState === 'function') {
+                        window.updateGameState(sessionData);
+                    }
+
+                    // Save to database
+                    setDoc(userDocRef, {
+                        dailyTaps: 0,
+                        dailyInterstitialUses: 0,
+                        dailyPopupUses: 0,
+                        lastResetDate: currentDate,
+                        lastActive: new Date().toISOString()
+                    }, { merge: true }).catch(e => { });
+                }
+            }, 60000); // Check every 60 seconds (1 minute)
+
+            // --- AUTO-SAVE TIMER (with change detection and anti-cheat) ---
+            // Save coin data to Firebase every 10 seconds ONLY if data changed
+            let lastSavedData = JSON.stringify(sessionData);
+            let lastSavedScoreInModule = 0; // Track last saved score within this module
+            const SCORE_JUMP_LIMIT = 5000; // Max score increase per save (allows tasks/referrals)
+
+            setInterval(() => {
+                // Sync gameState from main script before comparing
+                if (typeof window.getGameState === 'function') {
+                    const currentGameState = window.getGameState();
+                    if (currentGameState) {
+                        Object.keys(currentGameState).forEach(key => {
+                            sessionData[key] = currentGameState[key];
+                        });
+                    }
+                }
+                
+                const currentData = JSON.stringify(sessionData);
+
+                // Only save if data has changed
+                if (currentData !== lastSavedData) {
+                    // Anti-cheat: Validate score increase
+                    const scoreIncrease = sessionData.score - (lastSavedScoreInModule || 0);
+                    if (scoreIncrease > SCORE_JUMP_LIMIT && lastSavedScoreInModule > 0) {
+                        console.warn('Large score increase detected:', scoreIncrease, '(threshold:', SCORE_JUMP_LIMIT, ')');
+                        // Log but still save (tasks/referrals can cause this legitimately)
+                    }
+                    
+                    setDoc(userDocRef, {
+                        ...sessionData,
+                        lastActive: new Date().toISOString(),
+                        lastScoreUpdate: new Date().toISOString()
+                    }, { merge: true }).then(() => {
+                        lastSavedData = currentData; // Update last saved state
+                        lastSavedScoreInModule = sessionData.score;
+                        console.log('Auto-save successful. Score:', sessionData.score, 'DailyTaps:', sessionData.dailyTaps);
+                    }).catch(e => {
+                        console.error('Auto-save failed:', e);
+                    });
+                }
+
+            }, 10000); // Check every 10 seconds
+        }
+
+        // --- FETCH WITHDRAW SETTINGS FROM DATABASE ---
+        async function loadWithdrawSettings() {
+            try {
+                const settingsRef = doc(db, 'app_settings', 'withdraw_config');
+                const settingsDoc = await getDoc(settingsRef);
+
+                let minCoins = 50000;
+                let usdValue = 0.10;
+
+                if (settingsDoc.exists()) {
+                    const data = settingsDoc.data();
+                    minCoins = data.minCoins || 50000;
+                    usdValue = data.usdValue || 0.10;
+
+                    if (typeof window.updateWithdrawSettings === 'function') {
+                        window.updateWithdrawSettings(minCoins, usdValue);
+                    }
+                }
+
+                // Load withdrawal options from subcollection
+                const optionsRef = collection(db, 'app_settings', 'withdraw_config', 'options');
+                const optionsSnap = await getDocs(optionsRef);
+                
+                const options = [];
+                optionsSnap.forEach(optDoc => {
+                    options.push({ id: optDoc.id, ...optDoc.data() });
+                });
+
+                // Update the withdrawal options (USDT-only, no live price check)
+                if (typeof window.updateWithdrawOptions === 'function') {
+                    window.updateWithdrawOptions(options, null);
+                }
+            } catch (e) {
+                console.error('Error loading withdraw settings:', e);
+                // Use defaults on error
+                if (typeof window.updateWithdrawOptions === 'function') {
+                    window.updateWithdrawOptions([], null);
+                }
+            }
+        }
+
+        // --- FETCH TASKS FROM DATABASE ---
+        async function loadTasksConfig() {
+            try {
+                const tasksRef = doc(db, 'app_settings', 'tasks_config');
+                const tasksDoc = await getDoc(tasksRef);
+
+                if (tasksDoc.exists()) {
+                    const data = tasksDoc.data();
+                    const allTasks = data.tasks || [];
+                    // Store all tasks (for profile history)
+                    window.ALL_TASKS_FROM_DB = allTasks;
+                    // Store only active tasks (for tasks screen)
+                    window.TASKS_FROM_DB = allTasks.filter(t => t.active !== false);
+                } else {
+                    window.ALL_TASKS_FROM_DB = [];
+                    window.TASKS_FROM_DB = [];
+                }
+            } catch (e) {
+                window.ALL_TASKS_FROM_DB = [];
+                window.TASKS_FROM_DB = [];
+            }
+        }
+
+        // --- FETCH GAME CONFIG FROM DATABASE ---
+        async function loadGameConfig() {
+            try {
+                const configRef = doc(db, 'app_settings', 'game_config');
+                const configDoc = await getDoc(configRef);
+
+                if (configDoc.exists()) {
+                    const data = configDoc.data();
+                    if (typeof window.updateGameLimits === 'function') {
+                        window.updateGameLimits(data.maxDailyTaps || 10000, data.maxDailyAds || 8);
+                    }
+                }
+            } catch (e) {
+                console.error('Error loading game config:', e);
+            }
+        }
+
+        // Load settings when Firebase is ready
+        signInAnonymously(auth).then(() => {
+            loadWithdrawSettings();
+            loadTasksConfig();
+            loadGameConfig();
+        });
+    </script>
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            overscroll-behavior: none;
+            -webkit-user-select: none;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        @keyframes click-animation {
+            0% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(0.92);
+            }
+
+            100% {
+                transform: scale(1);
+            }
+        }
+
+        .coin-clicked {
+            animation: click-animation 0.1s ease-in-out;
+        }
+
+        @keyframes pulse-glow {
+
+            0%,
+            100% {
+                filter: drop-shadow(0 0 10px rgba(167, 139, 246, 0.7));
+            }
+
+            50% {
+                filter: drop-shadow(0 0 20px rgba(167, 139, 246, 1));
+            }
+        }
+
+        .multiplier-active-glow {
+            animation: pulse-glow 1.5s ease-in-out infinite;
+        }
+
+        .glass-panel {
+            background: rgba(30, 20, 55, 0.95);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* Custom Scrollbar for history */
+        .history-scroll::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .history-scroll::-webkit-scrollbar-thumb {
+            background-color: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+        }
+    </style>
+</head>
+
+<body
+    class="bg-gradient-to-b from-slate-950 via-purple-950 to-indigo-950 text-white flex flex-col h-screen m-0 p-0 overflow-hidden relative">
+
+    <!-- ✨ LOADING SCREEN -->
+    <style>
+        @keyframes loading-pulse-ring {
+            0% { transform: scale(0.8); opacity: 1; }
+            50% { transform: scale(1.3); opacity: 0; }
+            100% { transform: scale(0.8); opacity: 0; }
+        }
+        @keyframes loading-coin-float {
+            0%, 100% { transform: translateY(0) rotate(0deg); }
+            25% { transform: translateY(-8px) rotate(-3deg); }
+            75% { transform: translateY(4px) rotate(3deg); }
+        }
+        @keyframes loading-dots {
+            0%, 20% { content: ''; }
+            40% { content: '.'; }
+            60% { content: '..'; }
+            80%, 100% { content: '...'; }
+        }
+        @keyframes loading-shimmer {
+            0% { background-position: -200% center; }
+            100% { background-position: 200% center; }
+        }
+        @keyframes loading-fade-in-up {
+            0% { opacity: 0; transform: translateY(15px); }
+            100% { opacity: 1; transform: translateY(0); }
+        }
+        .loading-bar-fill {
+            animation: loading-shimmer 2s linear infinite;
+            background: linear-gradient(90deg, #a855f7 0%, #c084fc 25%, #f59e0b 50%, #c084fc 75%, #a855f7 100%);
+            background-size: 200% 100%;
+        }
+        .loading-msg-fade {
+            animation: loading-fade-in-up 0.6s ease-out both;
+        }
+    </style>
+    <div id="loading-screen"
+        class="fixed inset-0 z-50 bg-gradient-to-b from-slate-950 via-purple-950 to-indigo-950 flex flex-col items-center justify-center p-6 text-center overflow-hidden">
+        
+        <!-- Background decorative circles -->
+        <div class="absolute inset-0 overflow-hidden pointer-events-none">
+            <div class="absolute top-1/4 left-1/4 w-64 h-64 bg-violet-500/10 rounded-full blur-3xl"></div>
+            <div class="absolute bottom-1/3 right-1/4 w-48 h-48 bg-amber-500/5 rounded-full blur-3xl"></div>
+        </div>
+        
+        <!-- Logo / Coin icon with animation -->
+        <div class="relative mb-8">
+            <!-- Pulse rings -->
+            <div class="absolute inset-0 w-24 h-24 rounded-full border-2 border-violet-400/30" style="animation: loading-pulse-ring 2s ease-out infinite;"></div>
+            <div class="absolute inset-0 w-24 h-24 rounded-full border-2 border-purple-400/20" style="animation: loading-pulse-ring 2s ease-out 0.5s infinite;"></div>
+            
+            <!-- Main coin -->
+            <div class="relative w-24 h-24 bg-gradient-to-br from-violet-400 via-purple-500 to-violet-600 rounded-full flex items-center justify-center shadow-2xl shadow-violet-500/30" 
+                 style="animation: loading-coin-float 3s ease-in-out infinite;">
+                <div class="absolute inset-1 bg-gradient-to-br from-violet-300/30 to-transparent rounded-full"></div>
+                <span class="text-4xl font-bold text-white drop-shadow-lg relative z-10">₮</span>
+            </div>
+        </div>
+        
+        <!-- App name -->
+        <h1 class="text-2xl font-bold text-white mb-1 tracking-wide loading-msg-fade">USDT Click</h1>
+        <p class="text-amber-400/80 text-sm font-medium mb-8 loading-msg-fade" style="animation-delay: 0.15s;">Tap. Earn. Withdraw.</p>
+        
+        <!-- Progress bar -->
+        <div class="w-56 h-1.5 bg-gray-700/60 rounded-full overflow-hidden mb-6 loading-msg-fade" style="animation-delay: 0.3s;">
+            <div class="h-full rounded-full loading-bar-fill" style="width: 70%;"></div>
+        </div>
+        
+        <!-- Status text -->
+        <p class="text-gray-400 text-sm mb-10 loading-msg-fade" style="animation-delay: 0.4s;">
+            Getting things ready<span style="display: inline-block; width: 18px; text-align: left;" id="loading-dots-el"></span>
+        </p>
+        
+        <!-- Friendly ad support message -->
+        <div class="max-w-xs loading-msg-fade" style="animation-delay: 0.7s;">
+            <div class="bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl px-5 py-4">
+                <p class="text-gray-300 text-xs leading-relaxed">
+                    <span class="text-lg mr-1">😊</span> Hey! Quick note — ads help us keep this app free and running for everyone. Thanks for your support! 
+                    <span class="text-lg ml-0.5">💚</span>
+                </p>
+            </div>
+        </div>
+    </div>
+    <script>
+        // Animated dots for loading text
+        (function() {
+            let dotCount = 0;
+            setInterval(() => {
+                const el = document.getElementById('loading-dots-el');
+                if (el) {
+                    dotCount = (dotCount + 1) % 4;
+                    el.textContent = '.'.repeat(dotCount);
+                }
+            }, 400);
+        })();
+    </script>
+
+    <!-- ✨ BLOCKER SCREEN -->
+    <div id="blocker-screen"
+        class="fixed inset-0 z-50 bg-gray-900 flex flex-col items-center justify-center p-6 text-center hidden">
+        <div class="w-24 h-24 bg-blue-500 rounded-full flex items-center justify-center mb-6 animate-pulse">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"
+                class="w-12 h-12 text-white">
+                <path
+                    d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
+            </svg>
+        </div>
+        <h2 class="text-2xl font-bold mb-2">Access Restricted</h2>
+        <p class="text-gray-400 max-w-xs">This game is only available inside the Telegram App.</p>
+        <a href="https://telegram.org/"
+            class="mt-6 px-6 py-3 bg-violet-600 rounded-xl font-semibold hover:bg-violet-500 transition-colors">
+            Open Telegram
+        </a>
+    </div>
+
+    <!-- Header: Profile Icon (Hidden - moved to bottom nav) -->
+    <div class="absolute top-0 right-0 p-4 z-10 hidden">
+        <button id="profile-btn"
+            class="bg-gray-800/50 p-2 rounded-full border border-gray-700 active:scale-95 transition-transform hover:bg-gray-700 hidden">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"
+                class="w-8 h-8 text-gray-300">
+                <path fill-rule="evenodd"
+                    d="M7.5 6a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM3.751 20.105a8.25 8.25 0 0116.498 0 .75.75 0 01-.437.695A18.683 18.683 0 0112 22.5c-2.786 0-5.433-.608-7.812-1.7a.75.75 0 01-.437-.695z"
+                    clip-rule="evenodd" />
+            </svg>
+        </button>
+    </div>
+
+    <!-- ==================== SCREEN CONTAINER ==================== -->
+    <div id="screens-container" class="h-full w-full hidden">
+    
+    <!-- ✨ PLAY SCREEN (Main Game) -->
+    <div id="screen-play" class="screen flex flex-col h-full w-full max-w-md mx-auto pb-24 overflow-hidden">
+        <!-- Header with Gradient Background -->
+        <div class="relative bg-gradient-to-br from-violet-600 via-purple-500 to-fuchsia-500 pt-6 pb-12 px-4">
+            <div class="absolute inset-0 bg-black/10"></div>
+            <!-- Decorative elements -->
+            <div class="absolute top-4 left-4 w-20 h-20 bg-white/10 rounded-full blur-2xl"></div>
+            <div class="absolute bottom-2 right-8 w-16 h-16 bg-purple-300/20 rounded-full blur-xl"></div>
+            
+            <div class="relative flex flex-col items-center">
+                <h1 class="text-xl font-bold text-white/90 mb-1">USDT Click</h1>
+                <p class="text-white/60 text-xs">Tap to earn coins</p>
+            </div>
+        </div>
+
+        <!-- RichAds Embedded Banner Ad Container (collapses when empty) -->
+        <div id="rich-banner-container" class="px-2 flex justify-center" style="display: none;">
+            <div id="rich-banner-ad" class="w-full max-w-sm rounded-lg overflow-hidden"></div>
+        </div>
+
+        <!-- Stats Cards (overlapping header) -->
+        <div class="px-4 -mt-8 relative z-10">
+            <div class="grid grid-cols-2 gap-3">
+                <!-- Coins Balance -->
+                <div class="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-3 shadow-xl border border-gray-700/50">
+                    <div class="flex items-center space-x-2 mb-1">
+                        <div class="w-7 h-7 rounded-lg bg-amber-500/20 flex items-center justify-center">
+                            <span class="text-base">💰</span>
+                        </div>
+                    </div>
+                    <p id="score" class="text-2xl font-bold text-amber-400">...</p>
+                    <p class="text-gray-400 text-[10px] uppercase mt-0.5">Your Coins</p>
+                </div>
+
+                <!-- Daily Taps -->
+                <div class="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-3 shadow-xl border border-gray-700/50">
+                    <div class="flex items-center space-x-2 mb-1">
+                        <div class="w-7 h-7 rounded-lg bg-violet-500/20 flex items-center justify-center">
+                            <span class="text-base">👆</span>
+                        </div>
+                    </div>
+                    <p class="text-2xl font-bold text-violet-400"><span id="daily-taps">0</span><span id="daily-taps-limit" class="text-sm text-gray-500">/10K</span></p>
+                    <p class="text-gray-400 text-[10px] uppercase mt-0.5">Daily Taps</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content Area -->
+        <div class="flex-1 flex flex-col items-center justify-center px-4 py-2">
+            <!-- Status Message -->
+            <div id="status-message" class="h-6 text-sm text-amber-400 font-semibold transition-all mb-2"></div>
+
+            <!-- Coin Tap Area -->
+            <div id="coin-wrapper" class="relative transition-all duration-300">
+                <!-- Outer glow ring -->
+                <div class="absolute inset-0 -m-4 bg-gradient-to-br from-violet-400/20 to-purple-500/10 rounded-full blur-xl animate-pulse"></div>
+                
+                <!-- Coin SVG -->
+                <svg id="coin" viewBox="0 0 100 100"
+                    class="w-44 h-44 sm:w-52 sm:h-52 hover:brightness-110 transition-all duration-100 ease-out cursor-pointer relative z-10 active:scale-95"
+                    style="filter: drop-shadow(0 10px 20px rgba(139, 92, 246, 0.4)) drop-shadow(0 4px 6px rgba(0,0,0,0.3));">
+                    <!-- Outer ring -->
+                    <circle cx="50" cy="50" r="48" fill="url(#coinGradient)" stroke="#7c3aed" stroke-width="2" />
+                    <circle cx="50" cy="50" r="44" fill="none" stroke="#a855f7" stroke-width="1" opacity="0.5" />
+                    
+                    <!-- USDT Logo Background -->
+                    <circle cx="50" cy="45" r="22" fill="#7c3aed" />
+                    <circle cx="50" cy="45" r="18" fill="#a78bfa" />
+                    
+                    <!-- USDT Symbol -->
+                    <text x="50" y="52" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="white" text-anchor="middle">₮</text>
+                    
+                    <!-- USDT Click Text -->
+                    <text x="50" y="80" font-family="Arial, sans-serif" font-size="8" font-weight="bold" fill="#7c3aed" text-anchor="middle" letter-spacing="1">USDT CLICK</text>
+                    
+                    <!-- Shine effect -->
+                    <ellipse cx="38" cy="35" rx="8" ry="4" fill="white" opacity="0.4" transform="rotate(-30, 38, 35)" />
+                    
+                    <!-- Gradient definition -->
+                    <defs>
+                        <linearGradient id="coinGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" style="stop-color:#7c3aed;stop-opacity:1" />
+                            <stop offset="50%" style="stop-color:#a78bfa;stop-opacity:1" />
+                            <stop offset="100%" style="stop-color:#6d28d9;stop-opacity:1" />
+                        </linearGradient>
+                    </defs>
+                </svg>
+            </div>
+
+            <!-- Tap instruction -->
+            <p class="text-gray-500 text-xs mt-3 flex items-center space-x-1">
+                <span>👆</span>
+                <span>Tap the coin to earn</span>
+            </p>
+        </div>
+
+        <!-- Bottom Buttons -->
+        <div class="px-4 pb-4 space-y-2">
+            <!-- Watch Ad Button -->
+            <button id="reward-button-interstitial"
+                class="w-full bg-gradient-to-r from-purple-600 via-purple-500 to-pink-500 text-white font-bold py-3 px-4 rounded-xl text-sm shadow-lg active:scale-[0.98] transition-all duration-150 disabled:opacity-50 disabled:grayscale flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+                            <path fill-rule="evenodd" d="M2 10a8 8 0 1116 0 8 8 0 01-16 0zm6.39-2.908a.75.75 0 01.766.027l3.5 2.25a.75.75 0 010 1.262l-3.5 2.25A.75.75 0 018 12.25v-4.5a.75.75 0 01.39-.658z" clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                    <div class="text-left">
+                        <p class="font-semibold">Watch Ad</p>
+                        <p class="text-[10px] text-white/70">Get 2x multiplier</p>
+                    </div>
+                </div>
+                <div class="bg-white/20 rounded-lg px-2 py-1">
+                    <span id="interstitial-count" class="text-xs font-medium">0/10</span>
+                </div>
+            </button>
+
+            <!-- Get Bonus Button -->
+            <button id="reward-button-popup"
+                class="w-full bg-gradient-to-r from-amber-500 via-yellow-500 to-orange-500 text-white font-bold py-3 px-4 rounded-xl text-sm shadow-lg active:scale-[0.98] transition-all duration-150 disabled:opacity-50 disabled:grayscale flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                    <div class="text-left">
+                        <p class="font-semibold">Get Bonus</p>
+                        <p class="text-[10px] text-white/70">Claim daily reward</p>
+                    </div>
+                </div>
+                <div class="bg-white/20 rounded-lg px-2 py-1">
+                    <span id="popup-count" class="text-xs font-medium">0/10</span>
+                </div>
+            </button>
+        </div>
+    </div>
+    <!-- END PLAY SCREEN -->
+
+    <!-- ✨ TASKS SCREEN -->
+    <div id="screen-tasks" class="screen hidden flex-col h-full w-full max-w-md mx-auto pb-24 overflow-y-auto">
+        <!-- Header with Gradient Background -->
+        <div class="relative bg-gradient-to-br from-violet-600 via-purple-500 to-fuchsia-500 pt-8 pb-16 px-4">
+            <div class="absolute inset-0 bg-black/20"></div>
+            <div class="relative flex flex-col items-center">
+                <!-- Icon -->
+                <div class="w-20 h-20 bg-white/20 backdrop-blur rounded-2xl flex items-center justify-center shadow-2xl mb-4 border border-white/30">
+                    <span class="text-4xl">📋</span>
+                </div>
+                <h1 class="text-2xl font-bold text-white drop-shadow-lg">Daily Tasks</h1>
+                <p class="text-white/70 text-sm mt-2 text-center">Complete tasks to earn bonus coins!</p>
+            </div>
+        </div>
+
+        <!-- Stats Cards (overlapping header) -->
+        <div class="px-4 -mt-10 relative z-10">
+            <div class="grid grid-cols-2 gap-3">
+                <!-- Tasks Completed -->
+                <div class="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-4 shadow-xl border border-gray-700/50">
+                    <div class="flex items-center space-x-2 mb-2">
+                        <div class="w-8 h-8 rounded-lg bg-green-500/20 flex items-center justify-center">
+                            <span class="text-lg">✅</span>
+                        </div>
+                    </div>
+                    <p id="tasks-completed-count" class="text-3xl font-bold text-green-400">0</p>
+                    <p class="text-gray-400 text-xs uppercase mt-1">Completed</p>
+                </div>
+
+                <!-- Total Earnings -->
+                <div class="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-4 shadow-xl border border-gray-700/50">
+                    <div class="flex items-center space-x-2 mb-2">
+                        <div class="w-8 h-8 rounded-lg bg-yellow-500/20 flex items-center justify-center">
+                            <span class="text-lg">🪙</span>
+                        </div>
+                    </div>
+                    <p id="tasks-earnings-count" class="text-3xl font-bold text-amber-400">0</p>
+                    <p class="text-gray-400 text-xs uppercase mt-1">Earned</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Available Tasks Section -->
+        <div class="px-4 mt-5">
+            <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center space-x-2">
+                    <span class="text-xl">🎯</span>
+                    <span class="text-white font-bold">Available Tasks</span>
+                </div>
+                <span id="tasks-available-badge" class="bg-orange-500/20 text-orange-400 text-xs px-2 py-1 rounded-full font-bold">0 tasks</span>
+            </div>
+            
+            <!-- Tasks List -->
+            <div id="tasks-list" class="space-y-3">
+                <!-- Task items will be rendered here -->
+                <div class="animate-pulse bg-gray-800/60 rounded-xl p-4 border border-gray-700/50">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-12 h-12 rounded-xl bg-gray-700"></div>
+                        <div class="flex-1">
+                            <div class="h-4 bg-gray-700 rounded w-2/3 mb-2"></div>
+                            <div class="h-3 bg-gray-700 rounded w-1/2"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pro Tip -->
+        <div class="px-4 mt-5 mb-4">
+            <div class="bg-gradient-to-r from-violet-900/30 to-purple-900/30 rounded-xl p-4 border border-violet-500/20">
+                <div class="flex items-start space-x-3">
+                    <span class="text-2xl">💡</span>
+                    <div>
+                        <p class="text-violet-300 font-bold text-sm mb-1">Pro Tip!</p>
+                        <p class="text-gray-300 text-xs leading-relaxed">Complete all tasks to unlock withdrawals. Tasks refresh daily!</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- END TASKS SCREEN -->
+
+    <!-- ✨ REFER SCREEN -->
+    <div id="screen-refer" class="screen hidden flex-col h-full w-full max-w-md mx-auto pb-24 overflow-y-auto">
+        <!-- Header with Gradient Background -->
+        <div class="relative bg-gradient-to-br from-purple-600 via-pink-600 to-rose-500 pt-8 pb-16 px-4">
+            <div class="absolute inset-0 bg-black/20"></div>
+            <div class="relative flex flex-col items-center">
+                <!-- Icon -->
+                <div class="w-20 h-20 bg-white/20 backdrop-blur rounded-2xl flex items-center justify-center shadow-2xl mb-4 border border-white/30">
+                    <span class="text-4xl">🎁</span>
+                </div>
+                <h1 class="text-2xl font-bold text-white drop-shadow-lg">Refer & Earn</h1>
+                <p class="text-white/70 text-sm mt-2 text-center">Invite friends and earn coins together!</p>
+            </div>
+        </div>
+
+        <!-- Stats Cards (overlapping header) -->
+        <div class="px-4 -mt-10 relative z-10">
+            <div class="grid grid-cols-2 gap-3">
+                <!-- Total Referrals -->
+                <div class="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-4 shadow-xl border border-gray-700/50">
+                    <div class="flex items-center space-x-2 mb-2">
+                        <div class="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                            <span class="text-lg">👥</span>
+                        </div>
+                    </div>
+                    <p id="referral-count-screen" class="text-3xl font-bold text-white">0</p>
+                    <p class="text-gray-400 text-xs uppercase mt-1">Referrals</p>
+                </div>
+
+                <!-- Total Earned -->
+                <div class="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-4 shadow-xl border border-gray-700/50">
+                    <div class="flex items-center space-x-2 mb-2">
+                        <div class="w-8 h-8 rounded-lg bg-yellow-500/20 flex items-center justify-center">
+                            <span class="text-lg">🪙</span>
+                        </div>
+                    </div>
+                    <p id="referral-earnings-screen" class="text-3xl font-bold text-amber-400">0</p>
+                    <p class="text-gray-400 text-xs uppercase mt-1">Coins Earned</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- How It Works Section -->
+        <div class="px-4 mt-5">
+            <div class="bg-gray-800/60 rounded-xl p-4 border border-gray-700/50">
+                <div class="flex items-center space-x-2 mb-4">
+                    <span class="text-xl">💡</span>
+                    <span class="text-white font-bold">How It Works</span>
+                </div>
+
+                <div class="space-y-4">
+                    <!-- Step 1 -->
+                    <div class="flex items-start space-x-3">
+                        <div class="w-8 h-8 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center flex-shrink-0 text-white font-bold text-sm">1</div>
+                        <div>
+                            <p class="text-white font-medium text-sm">Share Your Link</p>
+                            <p class="text-gray-400 text-xs">Copy and share your unique referral link</p>
+                        </div>
+                    </div>
+                    <!-- Step 2 -->
+                    <div class="flex items-start space-x-3">
+                        <div class="w-8 h-8 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center flex-shrink-0 text-white font-bold text-sm">2</div>
+                        <div>
+                            <p class="text-white font-medium text-sm">Friends Join</p>
+                            <p class="text-gray-400 text-xs">They start playing through your link</p>
+                        </div>
+                    </div>
+                    <!-- Step 3 -->
+                    <div class="flex items-start space-x-3">
+                        <div class="w-8 h-8 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center flex-shrink-0 text-white font-bold text-sm">3</div>
+                        <div>
+                            <p class="text-white font-medium text-sm">Earn Rewards</p>
+                            <p class="text-gray-400 text-xs">Get coins when they play and achieve milestones</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Rewards Breakdown -->
+        <div class="px-4 mt-4">
+            <div class="bg-gradient-to-r from-purple-900/40 to-pink-900/40 rounded-xl p-4 border border-purple-500/30">
+                <div class="flex items-center space-x-2 mb-3">
+                    <span class="text-xl">🏆</span>
+                    <span class="text-white font-bold">Reward Tiers</span>
+                </div>
+
+                <div class="space-y-3">
+                    <div class="flex items-center justify-between bg-white/5 rounded-lg p-3">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
+                                <span class="text-lg">🤝</span>
+                            </div>
+                            <div>
+                                <p class="text-white text-sm font-medium">Friend Joins</p>
+                                <p class="text-gray-400 text-xs">Instant reward</p>
+                            </div>
+                        </div>
+                        <span class="text-green-400 font-bold text-lg">+400</span>
+                    </div>
+
+                    <div class="flex items-center justify-between bg-white/5 rounded-lg p-3">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                                <span class="text-lg">🎯</span>
+                            </div>
+                            <div>
+                                <p class="text-white text-sm font-medium">Reaches 10K Coins</p>
+                                <p class="text-gray-400 text-xs">Milestone bonus</p>
+                            </div>
+                        </div>
+                        <span class="text-blue-400 font-bold text-lg">+1,000</span>
+                    </div>
+
+                    <div class="flex items-center justify-between bg-white/5 rounded-lg p-3">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
+                                <span class="text-lg">💸</span>
+                            </div>
+                            <div>
+                                <p class="text-white text-sm font-medium">Friend Withdraws</p>
+                                <p class="text-gray-400 text-xs">Commission</p>
+                            </div>
+                        </div>
+                        <span class="text-amber-400 font-bold text-lg">+1%</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Referral Link Section -->
+        <div class="px-4 mt-4">
+            <div class="bg-gray-800/60 rounded-xl p-4 border border-gray-700/50">
+                <div class="flex items-center space-x-2 mb-3">
+                    <span class="text-xl">🔗</span>
+                    <span class="text-white font-bold">Your Referral Link</span>
+                </div>
+                
+                <div class="bg-gray-900 rounded-lg p-3 border border-gray-600 mb-3">
+                    <input type="text" id="referral-link-screen" readonly
+                        class="w-full bg-transparent text-white text-sm truncate focus:outline-none"
+                        value="Loading...">
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <button onclick="copyReferralLink()"
+                        class="bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 rounded-xl transition-all flex items-center justify-center space-x-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+                            <path d="M7 3.5A1.5 1.5 0 018.5 2h3.879a1.5 1.5 0 011.06.44l3.122 3.12A1.5 1.5 0 0117 6.622V12.5a1.5 1.5 0 01-1.5 1.5h-1v-3.379a3 3 0 00-.879-2.121L10.5 5.379A3 3 0 008.379 4.5H7v-1z" />
+                            <path d="M4.5 6A1.5 1.5 0 003 7.5v9A1.5 1.5 0 004.5 18h7a1.5 1.5 0 001.5-1.5v-5.879a1.5 1.5 0 00-.44-1.06L9.44 6.439A1.5 1.5 0 008.378 6H4.5z" />
+                        </svg>
+                        <span>Copy</span>
+                    </button>
+                    <button onclick="shareReferralLink()"
+                        class="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold py-3 rounded-xl transition-all flex items-center justify-center space-x-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+                            <path d="M13 4.5a2.5 2.5 0 11.702 1.737L6.97 9.604a2.518 2.518 0 010 .792l6.733 3.367a2.5 2.5 0 11-.671 1.341l-6.733-3.367a2.5 2.5 0 110-3.475l6.733-3.366A2.52 2.52 0 0113 4.5z" />
+                        </svg>
+                        <span>Share</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tips Section -->
+        <div class="px-4 mt-4 mb-4">
+            <div class="bg-gradient-to-r from-violet-900/30 to-indigo-900/30 rounded-xl p-4 border border-violet-500/20">
+                <div class="flex items-start space-x-3">
+                    <span class="text-2xl">💡</span>
+                    <div>
+                        <p class="text-violet-300 font-bold text-sm mb-1">Pro Tip!</p>
+                        <p class="text-gray-300 text-xs leading-relaxed">Share in Telegram groups, with friends, and on social media to maximize your earnings. More active friends = more rewards!</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- END REFER SCREEN -->
+
+    <!-- ✨ WITHDRAW SCREEN -->
+    <div id="screen-withdraw" class="screen hidden flex-col h-full w-full max-w-md mx-auto pb-24 overflow-y-auto">
+        <!-- Header with Gradient Background -->
+        <div class="relative bg-gradient-to-br from-violet-600 via-purple-600 to-fuchsia-500 pt-8 pb-16 px-4">
+            <div class="absolute inset-0 bg-black/20"></div>
+            <div class="relative flex flex-col items-center">
+                <!-- Icon -->
+                <div class="w-20 h-20 bg-white/20 backdrop-blur rounded-2xl flex items-center justify-center shadow-2xl mb-4 border border-white/30">
+                    <span class="text-4xl">💎</span>
+                </div>
+                <h1 class="text-2xl font-bold text-white drop-shadow-lg">Withdraw USDT</h1>
+                <p class="text-white/70 text-sm mt-2 text-center">Convert your coins to real USDT!</p>
+            </div>
+        </div>
+
+        <!-- Current Balance Card (overlapping header) -->
+        <div class="px-4 -mt-10 relative z-10">
+            <div class="bg-gradient-to-r from-gray-800 to-gray-900 rounded-xl p-4 shadow-xl border border-gray-700/50">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-xs uppercase tracking-wider">Your Balance</p>
+                        <div class="flex items-center space-x-2 mt-1">
+                            <span class="text-2xl">🪙</span>
+                            <span id="withdraw-balance-screen" class="text-2xl font-bold text-amber-400">0</span>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-gray-400 text-xs uppercase tracking-wider flex items-center justify-end gap-1">
+                            <span class="w-2 h-2 rounded-full bg-green-500"></span>
+                            Fixed Payouts
+                        </p>
+                        <p class="text-lg font-bold text-green-400 mt-1">USDT</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Withdrawal Options -->
+        <div class="px-4 mt-5">
+            <div class="flex items-center space-x-2 mb-3">
+                <span class="text-xl">📦</span>
+                <span class="text-white font-bold">Select Amount</span>
+            </div>
+            
+            <div id="withdraw-options-container" class="space-y-3">
+                <!-- Options will be loaded dynamically -->
+                <div class="animate-pulse bg-gray-800/60 rounded-xl p-4 border border-gray-700/50">
+                    <div class="h-6 bg-gray-700 rounded w-1/2 mb-2"></div>
+                    <div class="h-4 bg-gray-700 rounded w-1/3"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Warning Notice -->
+        <div class="px-4 mt-4">
+            <div class="bg-violet-500/20 rounded-xl p-4 border border-violet-500/50">
+                <div class="flex items-start space-x-3">
+                    <span class="text-2xl">⚠️</span>
+                    <div>
+                        <p class="text-violet-400 font-bold text-sm mb-1">Important!</p>
+                        <p class="text-yellow-300/80 text-xs leading-relaxed">Enter your <span class="font-bold text-white">Binance User ID</span> (NOT wallet address). We send USDT directly to your Binance account via Pay.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Binance ID Input -->
+        <div class="px-4 mt-4">
+            <div class="bg-gray-800/60 rounded-xl p-4 border border-gray-700/50">
+                <div class="flex items-center space-x-2 mb-3">
+                    <span class="text-xl">🔑</span>
+                    <span class="text-white font-bold">Binance User ID</span>
+                </div>
+                <input type="text" id="wallet-address-screen" placeholder="Example: 123456789"
+                    class="w-full bg-gray-900 border border-gray-600 rounded-xl p-4 text-white focus:outline-none focus:border-violet-500 text-lg font-mono" />
+                <p class="text-gray-500 text-xs mt-2">Find it in: Binance App → Profile → User ID</p>
+            </div>
+        </div>
+
+        <!-- Confirm Button -->
+        <div class="px-4 mt-4">
+            <button id="confirm-withdraw-screen"
+                class="w-full bg-gradient-to-r from-violet-600 to-purple-600 text-white font-bold py-4 rounded-xl active:scale-95 transition-all hover:from-violet-500 hover:to-purple-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 flex items-center justify-center space-x-2">
+                <span class="text-xl">💸</span>
+                <span>Confirm Withdrawal</span>
+            </button>
+            <p id="withdraw-status-screen" class="text-center mt-3 text-sm min-h-[20px]"></p>
+        </div>
+
+        <!-- History Section -->
+        <div class="px-4 mt-6 mb-4">
+            <div class="bg-gray-800/60 rounded-xl p-4 border border-gray-700/50">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center space-x-2">
+                        <span class="text-xl">📜</span>
+                        <span class="text-white font-bold">Withdrawal History</span>
+                    </div>
+                </div>
+                <div id="withdraw-history-list-screen" class="max-h-48 overflow-y-auto space-y-2">
+                    <p class="text-xs text-gray-500 text-center italic py-4">No withdrawals yet.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- END WITHDRAW SCREEN -->
+
+    <!-- ✨ PROFILE SCREEN -->
+    <div id="screen-profile" class="screen hidden flex-col h-full w-full max-w-md mx-auto pb-24 overflow-y-auto">
+        <!-- Profile Header with Gradient Background -->
+        <div class="relative bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-500 pt-8 pb-16 px-4">
+            <div class="absolute inset-0 bg-black/20"></div>
+            <div class="relative flex flex-col items-center">
+                <!-- Avatar with Ring -->
+                <div class="relative">
+                    <div id="profile-avatar-screen"
+                        class="w-24 h-24 rounded-full flex items-center justify-center text-4xl font-bold shadow-2xl overflow-hidden bg-gradient-to-br from-violet-400 to-purple-500 ring-4 ring-white/30">
+                        <img id="profile-photo-screen" src="" alt="" class="w-full h-full object-cover hidden">
+                        <span id="profile-initial-screen" class="text-white">?</span>
+                    </div>
+                    <!-- Level Badge -->
+                    <div id="profile-level-badge" class="absolute -bottom-2 -right-2 bg-gradient-to-r from-yellow-400 to-orange-500 text-white text-xs font-bold px-2.5 py-1 rounded-full shadow-lg border-2 border-white/50">
+                        Lv. 1
+                    </div>
+                </div>
+                <!-- User Name & ID -->
+                <h1 id="profile-name-screen" class="text-2xl font-bold text-white mt-4 drop-shadow-lg">Loading...</h1>
+                <p id="profile-id-screen" class="text-sm text-white/70 mt-1">ID: ...</p>
+                <p id="profile-username-screen" class="text-xs text-white/50 mt-0.5">@username</p>
+            </div>
+        </div>
+
+        <!-- Main Balance Card (overlapping header) -->
+        <div class="px-4 -mt-10 relative z-10">
+            <div class="bg-gradient-to-r from-gray-800 to-gray-900 rounded-2xl p-5 shadow-xl border border-gray-700/50">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-xs uppercase tracking-wider">Total Balance</p>
+                        <div class="flex items-center space-x-2 mt-1">
+                            <span class="text-3xl">🪙</span>
+                            <span id="profile-score-screen" class="text-3xl font-bold bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent">0</span>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-gray-400 text-xs uppercase tracking-wider">Rank</p>
+                        <p id="profile-rank-screen" class="text-xl font-bold text-purple-400 mt-1">🥉 Bronze</p>
+                    </div>
+                </div>
+                <!-- Progress to next level -->
+                <div class="mt-4">
+                    <div class="flex justify-between text-xs text-gray-400 mb-1">
+                        <span id="profile-level-text">Level 1</span>
+                        <span id="profile-xp-text">0 / 10,000 XP</span>
+                    </div>
+                    <div class="h-2 bg-gray-700 rounded-full overflow-hidden">
+                        <div id="profile-xp-bar" class="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full transition-all duration-500" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Stats Grid -->
+        <div class="px-4 mt-4">
+            <div class="grid grid-cols-2 gap-3">
+                <!-- Daily Taps -->
+                <div class="bg-gray-800/60 rounded-xl p-4 border border-gray-700/50 backdrop-blur">
+                    <div class="flex items-center space-x-2 mb-2">
+                        <div class="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                            <span class="text-lg">👆</span>
+                        </div>
+                        <span class="text-gray-400 text-xs uppercase">Today's Taps</span>
+                    </div>
+                    <p id="profile-daily-taps-screen" class="text-2xl font-bold text-white">0</p>
+                </div>
+
+                <!-- Total Referrals -->
+                <div class="bg-gray-800/60 rounded-xl p-4 border border-gray-700/50 backdrop-blur">
+                    <div class="flex items-center space-x-2 mb-2">
+                        <div class="w-8 h-8 rounded-lg bg-green-500/20 flex items-center justify-center">
+                            <span class="text-lg">👥</span>
+                        </div>
+                        <span class="text-gray-400 text-xs uppercase">Referrals</span>
+                    </div>
+                    <p id="profile-referrals-screen" class="text-2xl font-bold text-white">0</p>
+                </div>
+
+                <!-- Referral Earnings -->
+                <div class="bg-gray-800/60 rounded-xl p-4 border border-gray-700/50 backdrop-blur">
+                    <div class="flex items-center space-x-2 mb-2">
+                        <div class="w-8 h-8 rounded-lg bg-yellow-500/20 flex items-center justify-center">
+                            <span class="text-lg">💰</span>
+                        </div>
+                        <span class="text-gray-400 text-xs uppercase">Ref. Earnings</span>
+                    </div>
+                    <p id="profile-ref-earnings-screen" class="text-2xl font-bold text-yellow-400">0</p>
+                </div>
+
+                <!-- Completed Tasks -->
+                <div class="bg-gray-800/60 rounded-xl p-4 border border-gray-700/50 backdrop-blur">
+                    <div class="flex items-center space-x-2 mb-2">
+                        <div class="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                            <span class="text-lg">✅</span>
+                        </div>
+                        <span class="text-gray-400 text-xs uppercase">Tasks Done</span>
+                    </div>
+                    <p id="profile-tasks-count-screen" class="text-2xl font-bold text-white">0</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Ads Watched Today -->
+        <div class="px-4 mt-4">
+            <div class="bg-gray-800/60 rounded-xl p-4 border border-gray-700/50">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center space-x-2">
+                        <span class="text-xl">📺</span>
+                        <span class="text-gray-300 font-medium">Ads Watched Today</span>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="bg-gray-700/50 rounded-lg p-3 text-center">
+                        <p class="text-xs text-gray-400 mb-1">Interstitial</p>
+                        <p id="profile-interstitial-count" class="text-lg font-bold text-violet-400">0/3</p>
+                    </div>
+                    <div class="bg-gray-700/50 rounded-lg p-3 text-center">
+                        <p class="text-xs text-gray-400 mb-1">Reward</p>
+                        <p id="profile-popup-count" class="text-lg font-bold text-pink-400">0/3</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Completed Tasks List -->
+        <div class="px-4 mt-4 mb-4">
+            <div class="bg-gray-800/60 rounded-xl p-4 border border-gray-700/50">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center space-x-2">
+                        <span class="text-xl">🏆</span>
+                        <span class="text-gray-300 font-medium">Completed Tasks</span>
+                    </div>
+                    <span id="profile-tasks-badge" class="bg-green-500/20 text-green-400 text-xs px-2 py-1 rounded-full">0 done</span>
+                </div>
+                <div id="profile-completed-tasks-screen" class="max-h-48 overflow-y-auto space-y-2">
+                    <p class="text-xs text-gray-500 text-center italic py-4">No tasks completed yet.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- END PROFILE SCREEN -->
+
+    </div>
+    <!-- END SCREENS CONTAINER -->
+
+    <!-- ✨ BOTTOM NAVIGATION BAR -->
+    <nav id="bottom-nav"
+        class="fixed bottom-0 left-0 right-0 z-40 bg-gray-900/95 backdrop-blur-lg border-t border-gray-700 hidden">
+        <div class="max-w-md mx-auto flex justify-around items-center py-2 px-2">
+            <!-- Tasks -->
+            <button
+                class="nav-item flex flex-col items-center justify-center p-2 text-gray-400 hover:text-white transition-colors"
+                id="nav-tasks">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6">
+                    <path fill-rule="evenodd"
+                        d="M7.502 6h7.128A3.375 3.375 0 0118 9.375v9.375a3 3 0 003-3V6.108c0-1.505-1.125-2.811-2.664-2.94a48.972 48.972 0 00-.673-.05A3 3 0 0015 1.5h-1.5a3 3 0 00-2.663 1.618c-.225.015-.45.032-.673.05C8.662 3.295 7.554 4.542 7.502 6zM13.5 3A1.5 1.5 0 0012 4.5h4.5A1.5 1.5 0 0015 3h-1.5z"
+                        clip-rule="evenodd" />
+                    <path fill-rule="evenodd"
+                        d="M3 9.375C3 8.339 3.84 7.5 4.875 7.5h9.75c1.036 0 1.875.84 1.875 1.875v11.25c0 1.035-.84 1.875-1.875 1.875h-9.75A1.875 1.875 0 013 20.625V9.375zm9.586 4.594a.75.75 0 00-1.172-.938l-2.476 3.096-.908-.907a.75.75 0 00-1.06 1.06l1.5 1.5a.75.75 0 001.116-.062l3-3.75z"
+                        clip-rule="evenodd" />
+                </svg>
+                <span class="text-[10px] mt-1">Tasks</span>
+            </button>
+
+            <!-- Refer & Earn -->
+            <button
+                class="nav-item flex flex-col items-center justify-center p-2 text-gray-400 hover:text-white transition-colors"
+                id="nav-refer">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6">
+                    <path
+                        d="M6.25 6.375a4.125 4.125 0 118.25 0 4.125 4.125 0 01-8.25 0zM3.25 19.125a7.125 7.125 0 0114.25 0v.003l-.001.119a.75.75 0 01-.363.63 13.067 13.067 0 01-6.761 1.873c-2.472 0-4.786-.684-6.76-1.873a.75.75 0 01-.364-.63l-.001-.122zM19.75 7.5a.75.75 0 00-1.5 0v2.25H16a.75.75 0 000 1.5h2.25v2.25a.75.75 0 001.5 0v-2.25H22a.75.75 0 000-1.5h-2.25V7.5z" />
+                </svg>
+                <span class="text-[10px] mt-1">Refer</span>
+            </button>
+
+            <!-- Play (Center - Highlighted) -->
+            <button class="nav-item flex flex-col items-center justify-center p-2 -mt-6 transition-all group" id="nav-play">
+                <div class="relative">
+                    <!-- Pulse rings -->
+                    <div class="absolute inset-0 w-16 h-16 bg-gradient-to-r from-violet-500 to-fuchsia-500 rounded-full animate-ping opacity-20"></div>
+                    <div class="absolute inset-0 w-16 h-16 bg-gradient-to-r from-violet-500 to-fuchsia-500 rounded-full animate-pulse opacity-30"></div>
+                    <!-- Main button -->
+                    <div class="relative w-16 h-16 bg-gradient-to-br from-violet-500 via-purple-500 to-fuchsia-500 rounded-full flex items-center justify-center shadow-2xl border-4 border-gray-900 group-hover:scale-110 transition-transform duration-200">
+                        <!-- Inner glow -->
+                        <div class="absolute inset-1 bg-gradient-to-br from-violet-300/50 to-transparent rounded-full"></div>
+                        <!-- Icon -->
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"
+                            class="w-8 h-8 text-white drop-shadow-lg relative z-10">
+                            <path fill-rule="evenodd"
+                                d="M4.5 5.653c0-1.426 1.529-2.33 2.779-1.643l11.54 6.348c1.295.712 1.295 2.573 0 3.285L7.28 19.991c-1.25.687-2.779-.217-2.779-1.643V5.653z"
+                                clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                </div>
+                <span class="text-[10px] mt-2 text-purple-400 font-bold uppercase tracking-wider">Play</span>
+            </button>
+
+            <!-- Withdraw -->
+            <button
+                class="nav-item flex flex-col items-center justify-center p-2 text-gray-400 hover:text-white transition-colors"
+                id="nav-withdraw">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6">
+                    <path d="M12 7.5a2.25 2.25 0 100 4.5 2.25 2.25 0 000-4.5z" />
+                    <path fill-rule="evenodd"
+                        d="M1.5 4.875C1.5 3.839 2.34 3 3.375 3h17.25c1.035 0 1.875.84 1.875 1.875v9.75c0 1.036-.84 1.875-1.875 1.875H3.375A1.875 1.875 0 011.5 14.625v-9.75zM8.25 9.75a3.75 3.75 0 117.5 0 3.75 3.75 0 01-7.5 0zM18.75 9a.75.75 0 00-.75.75v.008c0 .414.336.75.75.75h.008a.75.75 0 00.75-.75V9.75a.75.75 0 00-.75-.75h-.008zM4.5 9.75A.75.75 0 015.25 9h.008a.75.75 0 01.75.75v.008a.75.75 0 01-.75.75H5.25a.75.75 0 01-.75-.75V9.75z"
+                        clip-rule="evenodd" />
+                    <path
+                        d="M2.25 18a.75.75 0 000 1.5c5.4 0 10.63.722 15.6 2.075 1.19.324 2.4-.558 2.4-1.82V18.75a.75.75 0 00-.75-.75H2.25z" />
+                </svg>
+                <span class="text-[10px] mt-1">Withdraw</span>
+            </button>
+
+            <!-- Profile -->
+            <button
+                class="nav-item flex flex-col items-center justify-center p-2 text-gray-400 hover:text-white transition-colors"
+                id="nav-profile">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6">
+                    <path fill-rule="evenodd"
+                        d="M7.5 6a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM3.751 20.105a8.25 8.25 0 0116.498 0 .75.75 0 01-.437.695A18.683 18.683 0 0112 22.5c-2.786 0-5.433-.608-7.812-1.7a.75.75 0 01-.437-.695z"
+                        clip-rule="evenodd" />
+                </svg>
+                <span class="text-[10px] mt-1">Profile</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- OLD MODALS REMOVED - Using Screen-based Navigation -->
+
+    <script>
+        // --- BOT CONFIGURATION ---
+        // Bot tokens stored in Firebase: app_settings/bot_config
+        // - referralBotToken: For referral notifications to users
+        // - adminBotToken: For withdrawal notifications to admin
+        // - adminChatId: Telegram chat ID to receive admin notifications
+
+        // --- WITHDRAW CONFIGURATION ---
+        let withdrawOptions = []; // Will be loaded from database
+        let selectedWithdrawOption = null;
+        let BNB_PRICE_USD = 1; // 
+
+        // Default options (used if database is empty) - now using USDT values
+        const DEFAULT_WITHDRAW_OPTIONS = [
+            { id: 'tier1', coins: 50000, usdtAmount: 0.10, label: 'Starter' },
+            { id: 'tier2', coins: 100000, usdtAmount: 0.25, label: 'Basic' },
+            { id: 'tier3', coins: 250000, usdtAmount: 0.70, label: 'Premium' },
+            { id: 'tier4', coins: 500000, usdtAmount: 1.50, label: 'Elite' }
+        ];
+
+        // Legacy support
+        let WITHDRAW_MIN = 50000;
+        let WITHDRAW_USD = 0.10;
+
+        // Function to update withdraw options from database
+        window.updateWithdrawOptions = function(options) {
+            if (options && options.length > 0) {
+                withdrawOptions = options.sort((a, b) => a.coins - b.coins);
+            } else {
+                withdrawOptions = DEFAULT_WITHDRAW_OPTIONS;
+            }
+            
+            // Update legacy values for compatibility (USDT-first)
+            if (withdrawOptions.length > 0) {
+                WITHDRAW_MIN = withdrawOptions[0].coins;
+                WITHDRAW_USD = withdrawOptions[0].usdtAmount || WITHDRAW_USD;
+            }
+            
+            renderWithdrawOptions();
+        };
+
+        // Render withdraw options in the UI
+        function renderWithdrawOptions() {
+            const container = document.getElementById('withdraw-options-container');
+            if (!container) return;
+
+            const options = withdrawOptions.length > 0 ? withdrawOptions : DEFAULT_WITHDRAW_OPTIONS;
+            
+            container.innerHTML = options.map((opt, index) => {
+                const usdtValue = opt.usdtAmount || 0; // USDT-first
+                const canAfford = gameState.score >= opt.coins;
+                const isSelected = selectedWithdrawOption?.id === opt.id;
+                
+                return `
+                    <div onclick="${canAfford ? `selectWithdrawOption('${opt.id}')` : ''}" 
+                        class="withdraw-option relative rounded-xl p-4 border-2 transition-all cursor-pointer
+                            ${isSelected ? 'bg-violet-500/20 border-violet-500' : 'bg-gray-800/60 border-gray-700/50 hover:border-gray-600'}
+                            ${!canAfford ? 'opacity-50 cursor-not-allowed' : ''}">
+                        
+                        ${opt.label ? `<div class="absolute -top-2 left-3 px-2 py-0.5 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full text-[10px] font-bold text-white">${opt.label}</div>` : ''}
+                        
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-12 h-12 rounded-xl bg-gradient-to-br ${index === 0 ? 'from-orange-400 to-yellow-500' : index === 1 ? 'from-gray-300 to-gray-400' : index === 2 ? 'from-yellow-400 to-amber-500' : 'from-cyan-400 to-blue-500'} flex items-center justify-center">
+                                    <span class="text-2xl">${index === 0 ? '🥉' : index === 1 ? '🥈' : index === 2 ? '🥇' : '💎'}</span>
+                                </div>
+                                <div>
+                                    <p class="text-white font-bold">$${usdtValue.toFixed(2)} USDT</p>
+                                    <p class="text-gray-400 text-sm">Fixed payout</p>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-yellow-400 font-bold text-lg">${opt.coins.toLocaleString()}</p>
+                                <p class="text-gray-500 text-xs">coins</p>
+                            </div>
+                        </div>
+                        
+                        ${!canAfford ? `<p class="text-red-400 text-xs mt-2">Need ${(opt.coins - gameState.score).toLocaleString()} more coins</p>` : ''}
+                        
+                        ${isSelected ? `
+                            <div class="absolute top-1/2 right-4 transform -translate-y-1/2">
+                                <div class="w-6 h-6 rounded-full bg-violet-500 flex items-center justify-center">
+                                    <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
+                                    </svg>
+                                </div>
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }).join('');
+
+            // Update button state
+            updateWithdrawButton();
+        }
+
+        // Select a withdraw option
+        window.selectWithdrawOption = function(optionId) {
+            const options = withdrawOptions.length > 0 ? withdrawOptions : DEFAULT_WITHDRAW_OPTIONS;
+            selectedWithdrawOption = options.find(o => o.id === optionId);
+            renderWithdrawOptions();
+        };
+
+        // Update withdraw button state
+        function updateWithdrawButton() {
+            const btn = document.getElementById('confirm-withdraw-screen');
+            const status = document.getElementById('withdraw-status-screen');
+            
+            if (!btn) return;
+            
+            if (!selectedWithdrawOption) {
+                btn.disabled = true;
+                if (status) {
+                    status.innerText = 'Please select a withdrawal amount';
+                    status.className = 'text-center mt-3 text-sm text-gray-400';
+                }
+            } else if (gameState.score < selectedWithdrawOption.coins) {
+                btn.disabled = true;
+                if (status) {
+                    status.innerText = `Need ${(selectedWithdrawOption.coins - gameState.score).toLocaleString()} more coins`;
+                    status.className = 'text-center mt-3 text-sm text-yellow-400';
+                }
+            } else {
+                btn.disabled = false;
+                if (status) {
+                    status.innerText = '';
+                    status.className = 'text-center mt-3 text-sm min-h-[20px]';
+                }
+            }
+        }
+
+        // Legacy function for compatibility
+        window.updateWithdrawSettings = function (minCoins, usdValue) {
+            WITHDRAW_MIN = minCoins;
+            WITHDRAW_USD = usdValue;
+        };
+
+        // --- 1. Init Web App ---
+        try {
+            Telegram.WebApp.ready();
+            Telegram.WebApp.expand();
+        } catch (e) { console.warn("TG SDK missing"); }
+
+        // --- 2. Game State & Limits ---
+        let MAX_DAILY_TAPS = 10000;
+        let MAX_DAILY_ADS = 8;
+
+        // Function to update limits from database
+        window.updateGameLimits = function(maxTaps, maxAds) {
+            MAX_DAILY_TAPS = maxTaps || 10000;
+            MAX_DAILY_ADS = maxAds || 8;
+            updateUI();
+        };
+        const TAP_RATE_LIMIT = 50; // Max taps per second (anti-cheat)
+        const SCORE_JUMP_THRESHOLD = 5000; // Max score increase per save (allows tasks/referrals)
+
+        // Anti-cheat tracking
+        let lastTapTimestamp = Date.now();
+        let tapTimestamps = [];
+        let lastSavedScore = 0;
+
+        let gameState = {
+            score: 0,
+            dailyTaps: 0,
+            dailyInterstitialUses: 0,
+            dailyPopupUses: 0,
+            withdrawHistory: [],
+            completedTasks: [],
+            // Referral fields
+            referredBy: null,           // Who referred this user
+            referralCount: 0,           // How many users this user referred
+            referralEarnings: 0,        // Total coins earned from referrals
+            referrals: [],              // List of referred user IDs
+            milestone10kClaimed: []     // Track which referrals' 10k milestones were claimed
+        };
+
+        let isMultiplierActive = false;
+        let multiplierTimeout;
+        let bonusCooldownActive = false;
+        let bonusCooldownInterval;
+
+        const scoreEl = document.getElementById('score');
+        const dailyTapsEl = document.getElementById('daily-taps');
+        const coinEl = document.getElementById('coin');
+        const coinWrapperEl = document.getElementById('coin-wrapper');
+        const rewardButtonEl = document.getElementById('reward-button-interstitial');
+        const rewardButtonPopupEl = document.getElementById('reward-button-popup');
+        const statusMessageEl = document.getElementById('status-message');
+
+        // Dynamic elements fetched in updateUI()
+
+        // Profile Elements
+        const profileBtn = document.getElementById('profile-btn');
+        const profileNameEl = document.getElementById('profile-name-screen');
+        const profileIdEl = document.getElementById('profile-id-screen');
+        const profileInitialEl = document.getElementById('profile-initial-screen');
+        const profileScoreEl = document.getElementById('profile-score-screen');
+
+        // Withdraw Elements
+        const confirmWithdrawBtn = document.getElementById('confirm-withdraw-screen');
+        const walletInput = document.getElementById('wallet-address-screen');
+        const withdrawStatus = document.getElementById('withdraw-status-screen');
+
+        // Tasks Elements
+        const tasksList = document.getElementById('tasks-list');
+
+        // Bottom Nav Elements
+        const navTasks = document.getElementById('nav-tasks');
+        const navRefer = document.getElementById('nav-refer');
+        const navPlay = document.getElementById('nav-play');
+        const navWithdraw = document.getElementById('nav-withdraw');
+        const navProfile = document.getElementById('nav-profile');
+        const historyList = document.getElementById('withdraw-history-list-screen');
+
+        // Screen Elements
+        const screenPlay = document.getElementById('screen-play');
+        const screenTasks = document.getElementById('screen-tasks');
+        const screenRefer = document.getElementById('screen-refer');
+        const screenWithdraw = document.getElementById('screen-withdraw');
+        const screenProfile = document.getElementById('screen-profile');
+
+        // Screen Navigation Function
+        function showScreen(screenName) {
+            // Internal function to perform actual screen transition
+            function performNavigation() {
+                // Hide all screens
+                const screens = document.querySelectorAll('.screen');
+                screens.forEach(screen => {
+                    screen.classList.add('hidden');
+                    screen.classList.remove('flex');
+                });
+
+                // Show selected screen
+                const targetScreen = document.getElementById(`screen-${screenName}`);
+                if (targetScreen) {
+                    targetScreen.classList.remove('hidden');
+                    targetScreen.classList.add('flex');
+                }
+
+                // Update nav highlighting
+                setActiveNav(screenName);
+
+                // Run screen-specific logic
+                if (screenName === 'tasks') {
+                    renderTasks();
+                } else if (screenName === 'refer') {
+                    updateReferralUI();
+                } else if (screenName === 'withdraw') {
+                    updateWithdrawScreen();
+                } else if (screenName === 'profile') {
+                    updateProfileScreen();
+                }
+            }
+
+            performNavigation();
+        }
+
+        // Make showScreen available globally
+        window.showScreen = showScreen;
+
+        // --- 3. Game Logic ---
+        function updateUI() {
+            scoreEl.innerText = gameState.score.toLocaleString();
+            dailyTapsEl.innerText = gameState.dailyTaps.toLocaleString();
+
+            // Update daily tap limit display
+            const dailyTapsLimitEl = document.getElementById('daily-taps-limit');
+            if (dailyTapsLimitEl) {
+                const limitDisplay = MAX_DAILY_TAPS >= 1000 ? `/${(MAX_DAILY_TAPS / 1000).toFixed(0)}K` : `/${MAX_DAILY_TAPS}`;
+                dailyTapsLimitEl.innerText = limitDisplay;
+            }
+
+            const interstitialCountEl = document.getElementById('interstitial-count');
+            const popupCountEl = document.getElementById('popup-count');
+
+            if (interstitialCountEl) interstitialCountEl.innerText = `${gameState.dailyInterstitialUses}/${MAX_DAILY_ADS}`;
+            if (popupCountEl) popupCountEl.innerText = `${gameState.dailyPopupUses}/${MAX_DAILY_ADS}`;
+
+            if (gameState.dailyInterstitialUses >= MAX_DAILY_ADS) {
+                rewardButtonEl.disabled = true;
+                rewardButtonEl.classList.add('opacity-50', 'grayscale');
+            } else if (!isMultiplierActive) {
+                rewardButtonEl.disabled = false;
+                rewardButtonEl.classList.remove('opacity-50', 'grayscale');
+            }
+
+            if (gameState.dailyPopupUses >= MAX_DAILY_ADS) {
+                rewardButtonPopupEl.disabled = true;
+                rewardButtonPopupEl.classList.add('opacity-50', 'grayscale');
+            } else {
+                rewardButtonPopupEl.disabled = false;
+                rewardButtonPopupEl.classList.remove('opacity-50', 'grayscale');
+            }
+
+            // Update profile score if on profile screen
+            if (!screenProfile.classList.contains('hidden')) {
+                profileScoreEl.innerText = gameState.score.toLocaleString();
+            }
+
+            // Render History if on withdraw screen
+            if (!screenWithdraw.classList.contains('hidden')) {
+                renderHistory();
+            }
+        }
+
+        // Update Profile Screen
+        function updateProfileScreen() {
+            const user = window.currentUserInfo || { name: 'Player', id: 'Unknown', username: '', photoUrl: null };
+            profileNameEl.innerText = user.name;
+            profileIdEl.innerText = `ID: ${user.id}`;
+
+            // Update username
+            const profileUsernameEl = document.getElementById('profile-username-screen');
+            if (profileUsernameEl) {
+                profileUsernameEl.innerText = user.username ? `@${user.username}` : '';
+                profileUsernameEl.style.display = user.username ? 'block' : 'none';
+            }
+
+            // Handle profile photo
+            const profilePhoto = document.getElementById('profile-photo-screen');
+            if (user.photoUrl) {
+                profilePhoto.src = user.photoUrl;
+                profilePhoto.classList.remove('hidden');
+                profileInitialEl.classList.add('hidden');
+            } else {
+                profilePhoto.classList.add('hidden');
+                profileInitialEl.classList.remove('hidden');
+                profileInitialEl.innerText = user.name.charAt(0).toUpperCase();
+            }
+
+            // Update score
+            profileScoreEl.innerText = gameState.score.toLocaleString();
+
+            // Calculate Level & Rank based on score
+            const score = gameState.score;
+            const levels = [
+                { level: 1, minScore: 0, maxScore: 10000, name: 'Newcomer' },
+                { level: 2, minScore: 10000, maxScore: 25000, name: 'Explorer' },
+                { level: 3, minScore: 25000, maxScore: 50000, name: 'Collector' },
+                { level: 4, minScore: 50000, maxScore: 100000, name: 'Hustler' },
+                { level: 5, minScore: 100000, maxScore: 250000, name: 'Champion' },
+                { level: 6, minScore: 250000, maxScore: 500000, name: 'Master' },
+                { level: 7, minScore: 500000, maxScore: 1000000, name: 'Legend' },
+                { level: 8, minScore: 1000000, maxScore: Infinity, name: 'Tycoon' }
+            ];
+            const currentLevel = levels.find(l => score >= l.minScore && score < l.maxScore) || levels[levels.length - 1];
+            const nextLevel = levels.find(l => l.level === currentLevel.level + 1);
+            
+            // Level badge
+            const levelBadge = document.getElementById('profile-level-badge');
+            if (levelBadge) levelBadge.innerText = `Lv. ${currentLevel.level}`;
+
+            // Level text and XP bar
+            const levelText = document.getElementById('profile-level-text');
+            const xpText = document.getElementById('profile-xp-text');
+            const xpBar = document.getElementById('profile-xp-bar');
+            
+            if (levelText) levelText.innerText = `Level ${currentLevel.level} - ${currentLevel.name}`;
+            
+            if (nextLevel) {
+                const xpInLevel = score - currentLevel.minScore;
+                const xpNeeded = currentLevel.maxScore - currentLevel.minScore;
+                const progress = Math.min((xpInLevel / xpNeeded) * 100, 100);
+                if (xpText) xpText.innerText = `${xpInLevel.toLocaleString()} / ${xpNeeded.toLocaleString()} XP`;
+                if (xpBar) xpBar.style.width = `${progress}%`;
+            } else {
+                if (xpText) xpText.innerText = 'MAX LEVEL';
+                if (xpBar) xpBar.style.width = '100%';
+            }
+
+            // Rank display
+            const rankEl = document.getElementById('profile-rank-screen');
+            const ranks = [
+                { min: 0, rank: '🥉 Bronze', color: 'text-orange-400' },
+                { min: 25000, rank: '🥈 Silver', color: 'text-gray-300' },
+                { min: 100000, rank: '🥇 Gold', color: 'text-yellow-400' },
+                { min: 500000, rank: '💎 Diamond', color: 'text-cyan-400' },
+                { min: 1000000, rank: '👑 Elite', color: 'text-purple-400' }
+            ];
+            const currentRank = [...ranks].reverse().find(r => score >= r.min) || ranks[0];
+            if (rankEl) {
+                rankEl.innerText = currentRank.rank;
+                rankEl.className = `text-xl font-bold mt-1 ${currentRank.color}`;
+            }
+            
+            // Update referral stats
+            const profileReferrals = document.getElementById('profile-referrals-screen');
+            if (profileReferrals) {
+                profileReferrals.innerText = (gameState.referralCount || 0).toString();
+            }
+
+            const profileRefEarnings = document.getElementById('profile-ref-earnings-screen');
+            if (profileRefEarnings) {
+                profileRefEarnings.innerText = (gameState.referralEarnings || 0).toLocaleString();
+            }
+
+            // Daily taps
+            const profileDailyTaps = document.getElementById('profile-daily-taps-screen');
+            if (profileDailyTaps) {
+                profileDailyTaps.innerText = (gameState.dailyTaps || 0).toLocaleString();
+            }
+
+            // Tasks count - show all completed tasks (including inactive ones in profile)
+            const tasksCount = document.getElementById('profile-tasks-count-screen');
+            const tasksBadge = document.getElementById('profile-tasks-badge');
+            const completedCount = (gameState.completedTasks || []).length;
+            if (tasksCount) tasksCount.innerText = completedCount.toString();
+            if (tasksBadge) tasksBadge.innerText = `${completedCount} done`;
+
+            // Ads watched
+            const interstitialCount = document.getElementById('profile-interstitial-count');
+            const popupCount = document.getElementById('profile-popup-count');
+            if (interstitialCount) interstitialCount.innerText = `${gameState.dailyInterstitialUses || 0}/${MAX_DAILY_ADS}`;
+            if (popupCount) popupCount.innerText = `${gameState.dailyPopupUses || 0}/${MAX_DAILY_ADS}`;
+
+            // Render completed tasks
+            renderProfileCompletedTasksScreen();
+        }
+
+        // Update Withdraw Screen
+        function updateWithdrawScreen() {
+            renderHistory();
+            
+            // Update balance display
+            const balanceDisplay = document.getElementById('withdraw-balance-screen');
+            if (balanceDisplay) balanceDisplay.innerText = gameState.score.toLocaleString();
+            
+            // Render withdrawal options
+            renderWithdrawOptions();
+        }
+
+        // Update Referral UI
+        function updateReferralUI() {
+            const referralCountEl = document.getElementById('referral-count-screen');
+            const referralEarningsEl = document.getElementById('referral-earnings-screen');
+            const referralLinkEl = document.getElementById('referral-link-screen');
+            
+            if (referralCountEl) referralCountEl.innerText = (gameState.referralCount || 0).toString();
+            if (referralEarningsEl) referralEarningsEl.innerText = (gameState.referralEarnings || 0).toLocaleString();
+            
+            // Update referral link
+            if (referralLinkEl && window.currentUserInfo) {
+                const botUsername = 'YOUR_BOT_USERNAME';
+                const referralLink = `https://t.me/${botUsername}/YOUR_MINI_APP_SHORT_NAME?startapp=ref_${window.currentUserInfo.id}`;
+                referralLinkEl.value = referralLink;
+            }
+        }
+
+        // Render completed tasks for profile screen
+        function renderProfileCompletedTasksScreen() {
+            const container = document.getElementById('profile-completed-tasks-screen');
+            const completedTasks = gameState.completedTasks || [];
+            // Use all tasks (including inactive) for profile history
+            const allTasks = window.ALL_TASKS_FROM_DB || window.TASKS_FROM_DB || [];
+
+            if (completedTasks.length === 0) {
+                container.innerHTML = '<p class="text-xs text-gray-500 text-center italic py-4">No tasks completed yet. Complete tasks to earn coins!</p>';
+                return;
+            }
+
+            // Icon map for task types (same as tasks screen)
+            const iconMap = {
+                'telegram': '📱',
+                'twitter': '🐦',
+                'youtube': '▶️',
+                'instagram': '📸',
+                'discord': '💬',
+                'default': '🔗'
+            };
+
+            let totalEarned = 0;
+            const taskItems = completedTasks.map(taskId => {
+                const task = allTasks.find(t => t.id === taskId);
+                if (task) {
+                    totalEarned += task.reward;
+                    const taskIcon = iconMap[task.icon] || iconMap['default'];
+                    return `
+                        <div class="flex items-center justify-between bg-gray-700/40 rounded-lg p-3 hover:bg-gray-700/60 transition-colors gap-2">
+                            <div class="flex items-center space-x-3 min-w-0 flex-1">
+                                <div class="w-8 h-8 rounded-lg bg-green-500/20 flex items-center justify-center flex-shrink-0">
+                                    <span class="text-sm">${taskIcon}</span>
+                                </div>
+                                <span class="text-white text-sm font-medium truncate">${task.title}</span>
+                            </div>
+                            <span class="text-green-400 text-sm font-bold flex-shrink-0 whitespace-nowrap">+${task.reward.toLocaleString()}</span>
+                        </div>
+                    `;
+                }
+                return '';
+            }).filter(Boolean);
+
+            container.innerHTML = `
+                <div class="flex items-center justify-between mb-3 pb-3 border-b border-gray-600/50">
+                    <span class="text-gray-400 text-sm">Total Earned</span>
+                    <div class="flex items-center space-x-1">
+                        <span class="text-xl">🪙</span>
+                        <span class="text-yellow-400 font-bold text-lg">${totalEarned.toLocaleString()}</span>
+                    </div>
+                </div>
+                <div class="space-y-2">${taskItems.join('')}</div>
+            `;
+        }
+
+        function renderHistory() {
+            if (!gameState.withdrawHistory || gameState.withdrawHistory.length === 0) {
+                historyList.innerHTML = '<p class="text-xs text-gray-500 text-center italic py-4">No withdrawals yet.</p>';
+                return;
+            }
+
+            historyList.innerHTML = gameState.withdrawHistory.map(item => {
+                const addr = item.address || '';
+                const displayAddr = addr.length > 10
+                    ? `${addr.substring(0, 6)}...${addr.substring(addr.length - 4)}`
+                    : addr;
+                const usdAmount = item.amountUsd || 0;
+                const statusColors = {
+                    'Pending': 'bg-yellow-500/20 text-yellow-400',
+                    'Paid': 'bg-green-500/20 text-green-400',
+                    'Rejected': 'bg-red-500/20 text-red-400'
+                };
+                const statusClass = statusColors[item.status] || 'bg-gray-500/20 text-gray-400';
+                
+                return `
+                <div class="bg-gray-700/50 p-3 rounded-lg flex justify-between items-center">
+                    <div>
+                        <div class="flex items-center space-x-2">
+                            <span class="text-white font-bold">$${parseFloat(usdAmount).toFixed(2)} USDT</span>
+                            ${item.amountCoins ? `<span class="text-gray-400 text-xs">${Number(item.amountCoins).toLocaleString()} coins</span>` : ''}
+                        </div>
+                        <span class="text-gray-500 text-xs">${new Date(item.date).toLocaleDateString()} • ID: ${displayAddr}</span>
+                    </div>
+                    <span class="px-2 py-1 rounded-full text-xs font-bold ${statusClass}">${item.status}</span>
+                </div>
+            `}).join('');
+        }
+
+        window.updateGameState = function (newData) {
+            gameState = { ...gameState, ...newData };
+            updateUI();
+
+            // Check for 10k milestone if user was referred
+            if (gameState.score >= 10000 && gameState.referredBy && typeof window.checkAndCredit10kMilestone === 'function') {
+                window.checkAndCredit10kMilestone();
+            }
+        };
+
+        // Expose gameState to Firebase module for auto-save sync
+        window.getGameState = function () {
+            return { ...gameState };
+        };
+
+        coinEl.addEventListener('click', () => {
+            coinEl.classList.add('coin-clicked');
+
+            // Anti-cheat: Rate limiting
+            const now = Date.now();
+            
+            // Keep only last second of taps
+            tapTimestamps = tapTimestamps.filter(t => now - t < 1000);
+            
+            // Anti-cheat: Minimum time between taps (20ms = 50 taps/sec max)
+            if (now - lastTapTimestamp < 20) {
+                setTimeout(() => { coinEl.classList.remove('coin-clicked'); }, 100);
+                return;
+            }
+            lastTapTimestamp = now;
+            
+            // Check if exceeding rate limit (only warn, don't block completely)
+            if (tapTimestamps.length >= TAP_RATE_LIMIT) {
+                console.warn('Tap rate limit reached for this second');
+                setTimeout(() => { coinEl.classList.remove('coin-clicked'); }, 100);
+                return;
+            }
+            
+            // Add timestamp after validation
+            tapTimestamps.push(now);
+
+            if (gameState.dailyTaps < MAX_DAILY_TAPS) {
+                const points = isMultiplierActive ? 2 : 1;
+                gameState.score += points;
+                gameState.dailyTaps += 1;
+                updateUI();
+
+                // Save locally and trigger database save
+                if (typeof window.saveDataLocally === 'function') {
+                    window.saveDataLocally('score', gameState.score);
+                    window.saveDataLocally('dailyTaps', gameState.dailyTaps);
+                }
+            } else {
+                statusMessageEl.innerText = "Daily Tap Limit Reached!";
+                setTimeout(() => { if (statusMessageEl.innerText === "Daily Tap Limit Reached!") statusMessageEl.innerText = ""; }, 2000);
+            }
+
+            setTimeout(() => { coinEl.classList.remove('coin-clicked'); }, 100);
+        });
+
+        // --- Profile Logic (Now using screen navigation) ---
+        profileBtn.addEventListener('click', () => showScreen('profile'));
+
+        confirmWithdrawBtn.addEventListener('click', async () => {
+            const address = walletInput.value.trim();
+            if (!address) {
+                withdrawStatus.innerText = "Please enter your Binance User ID.";
+                withdrawStatus.className = "text-center mt-3 text-sm text-red-500";
+                return;
+            }
+            
+            // Check if an option is selected
+            if (!selectedWithdrawOption) {
+                withdrawStatus.innerText = "Please select a withdrawal amount.";
+                withdrawStatus.className = "text-center mt-3 text-sm text-red-500";
+                return;
+            }
+            
+            const withdrawCoins = selectedWithdrawOption.coins;
+            // USDT bot: use fixed USDT payout
+            const withdrawUsd = selectedWithdrawOption.usdtAmount || 0;
+            
+            if (gameState.score < withdrawCoins) {
+                withdrawStatus.innerText = "Insufficient balance.";
+                withdrawStatus.className = "text-center mt-3 text-sm text-red-500";
+                return;
+            }
+
+            // Check if all tasks are completed
+            const availableTasks = window.TASKS_FROM_DB || [];
+            const completedTasks = gameState.completedTasks || [];
+            const incompleteTasks = availableTasks.filter(task => !completedTasks.includes(task.id));
+            
+            if (incompleteTasks.length > 0) {
+                withdrawStatus.innerText = `Complete all tasks to withdraw! (${incompleteTasks.length} remaining)`;
+                withdrawStatus.className = "text-center mt-3 text-sm text-red-500";
+                // Redirect to tasks screen after a short delay
+                setTimeout(() => {
+                    showScreen('tasks');
+                }, 1500);
+                return;
+            }
+
+            // Show confirmation dialog
+            const user = window.currentUserInfo || {};
+            const confirmMessage = `Confirm Withdrawal:\n\n` +
+                `Amount: ${withdrawCoins.toLocaleString()} coins\n` +
+                `Value: $${withdrawUsd.toFixed(2)} USDT\n` +
+                `Binance User ID: ${address}\n` +
+                `User: ${user.name || 'Unknown'}\n\n` +
+                `Proceed with withdrawal?`;
+            
+            if (!confirm(confirmMessage)) {
+                withdrawStatus.innerText = "Withdrawal cancelled.";
+                withdrawStatus.className = "text-center mt-3 text-sm text-yellow-500";
+                return;
+            }
+
+            confirmWithdrawBtn.disabled = true;
+            confirmWithdrawBtn.innerHTML = '<span class="animate-pulse">Processing...</span>';
+
+            // 1. Deduct Score
+            gameState.score -= withdrawCoins;
+
+            // 2. Add to History
+            const newRecord = {
+                date: new Date().toISOString(),
+                amountCoins: withdrawCoins,
+                amountUsd: withdrawUsd,
+                address: address,
+                status: 'Pending'
+            };
+
+            if (!gameState.withdrawHistory) gameState.withdrawHistory = [];
+            gameState.withdrawHistory.unshift(newRecord);
+
+            updateUI(); // Updates UI and local view
+
+            // 3. Save to Firebase (User Doc + Public Withdraws Coll)
+            try {
+                if (typeof window.forceDatabaseSave === 'function' && typeof window.createWithdrawalRequest === 'function') {
+                    const user = window.currentUserInfo || {};
+
+                    // Save User Data first
+                    await window.forceDatabaseSave({
+                        score: gameState.score,
+                        withdrawHistory: gameState.withdrawHistory
+                    });
+
+                    // Create Public Request
+                    const success = await window.createWithdrawalRequest({
+                        userId: user.id,
+                        username: user.username,
+                        name: user.name,
+                        amountCoins: withdrawCoins,
+                        amountUsd: withdrawUsd,
+                        walletAddress: address,
+                        status: 'Pending'
+                    });
+
+                    if (success) {
+                        withdrawStatus.innerText = "Withdrawal Requested Successfully!";
+                        withdrawStatus.className = "text-center mt-3 text-sm text-green-500";
+
+                        // 4. Credit referrer 10% of withdrawal
+                        if (typeof window.creditReferrerOnWithdrawal === 'function') {
+                            window.creditReferrerOnWithdrawal(withdrawCoins);
+                        }
+
+                        // 5. Notify admin via Telegram
+                        if (typeof window.notifyAdminWithdrawal === 'function') {
+                            window.notifyAdminWithdrawal({
+                                userId: user.id,
+                                username: user.username,
+                                name: user.name,
+                                amountCoins: withdrawCoins,
+                                amountUsd: withdrawUsd,
+                                walletAddress: address
+                            });
+                        }
+                        
+                        // Reset selected option
+                        selectedWithdrawOption = null;
+                    } else {
+                        withdrawStatus.innerText = "Error saving request. Contact support.";
+                        withdrawStatus.className = "text-center mt-3 text-sm text-red-500";
+                    }
+                } else {
+                    withdrawStatus.innerText = "System error. Please try again.";
+                    withdrawStatus.className = "text-center mt-3 text-sm text-red-500";
+                    console.error('Withdrawal functions not available');
+                }
+            } catch (error) {
+                console.error('Withdrawal error:', error);
+                withdrawStatus.innerText = "Error processing withdrawal. Try again.";
+                withdrawStatus.className = "text-center mt-3 text-sm text-red-500";
+                // Restore the score since withdrawal failed
+                gameState.score += withdrawCoins;
+                gameState.withdrawHistory.shift();
+                updateUI();
+            }
+
+            confirmWithdrawBtn.innerHTML = '<span class="text-xl">💸</span><span>Confirm Withdrawal</span>';
+            // Re-enable based on new state
+            updateWithdrawScreen();
+            walletInput.value = '';
+            renderHistory();
+        });
+
+        // --- Refer Logic (Now using screen navigation) ---
+
+        // Copy referral link to clipboard
+        window.copyReferralLink = function () {
+            const referralLink = window.getReferralLink ? window.getReferralLink() : '';
+            if (referralLink) {
+                navigator.clipboard.writeText(referralLink).then(() => {
+                    if (window.Telegram?.WebApp?.showAlert) {
+                        window.Telegram.WebApp.showAlert('✅ Referral link copied!');
+                    } else {
+                        alert('Referral link copied!');
+                    }
+                }).catch(err => {
+                    console.error('Failed to copy:', err);
+                });
+            }
+        };
+
+        // Share referral link via Telegram
+        window.shareReferralLink = function () {
+            const referralLink = window.getReferralLink ? window.getReferralLink() : '';
+            const shareText = `🎮 Join me on USDT Click and earn free USDT!\n\n💰 Tap to earn USDT\n🎁 Complete tasks for bonus\n💸 Withdraw real USDT\n\nJoin now and we both get rewards! 👇`;
+
+            if (window.Telegram?.WebApp?.openTelegramLink) {
+                // Use Telegram's share functionality
+                const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent(shareText)}`;
+                window.Telegram.WebApp.openTelegramLink(shareUrl);
+            } else {
+                // Fallback: copy to clipboard
+                window.copyReferralLink();
+            }
+        };
+
+        // --- Tasks Logic ---
+
+        // Fallback tasks if database not loaded yet
+        const DEFAULT_TASKS = [
+            {
+                id: 'join_channel_1',
+                type: 'telegram_channel',
+                title: 'Join Our Channel',
+                description: 'Join our official Telegram channel',
+                reward: 1000,
+                link: 'https://t.me/your_channel_here',
+                icon: 'telegram'
+            }
+        ];
+
+        // Get tasks from database or fallback
+        function getTasksConfig() {
+            return window.TASKS_FROM_DB && window.TASKS_FROM_DB.length > 0
+                ? window.TASKS_FROM_DB
+                : DEFAULT_TASKS;
+        }
+
+        function renderTasks() {
+            const completedTasks = gameState.completedTasks || [];
+            const tasksConfig = getTasksConfig();
+
+            // Update stats - only count completed tasks that are in the active tasks list
+            const activeTaskIds = tasksConfig.map(t => t.id);
+            const completedCount = completedTasks.filter(taskId => activeTaskIds.includes(taskId)).length;
+            const totalTasks = tasksConfig.length;
+            const availableTasks = totalTasks - completedCount;
+            
+            let totalEarned = 0;
+            completedTasks.forEach(taskId => {
+                const task = tasksConfig.find(t => t.id === taskId);
+                if (task) totalEarned += task.reward;
+            });
+
+            const completedEl = document.getElementById('tasks-completed-count');
+            const earningsEl = document.getElementById('tasks-earnings-count');
+            const availableBadge = document.getElementById('tasks-available-badge');
+            
+            if (completedEl) completedEl.innerText = `${completedCount}/${totalTasks}`;
+            if (earningsEl) earningsEl.innerText = totalEarned.toLocaleString();
+            if (availableBadge) availableBadge.innerText = `${availableTasks} remaining`;
+
+            if (tasksConfig.length === 0) {
+                tasksList.innerHTML = `
+                    <div class="text-center py-8 bg-gray-800/40 rounded-xl border border-gray-700/50">
+                        <span class="text-4xl mb-3 block">📭</span>
+                        <p class="text-gray-400 text-sm">No tasks available right now</p>
+                        <p class="text-gray-500 text-xs mt-1">Check back later!</p>
+                    </div>
+                `;
+                return;
+            }
+
+            // Sort tasks: incomplete first, completed last
+            const sortedTasks = tasksConfig.sort((a, b) => {
+                const aCompleted = completedTasks.includes(a.id);
+                const bCompleted = completedTasks.includes(b.id);
+                if (aCompleted === bCompleted) return 0;
+                return aCompleted ? 1 : -1;
+            });
+
+            tasksList.innerHTML = sortedTasks.map(task => {
+                const isCompleted = completedTasks.includes(task.id);
+
+                // Get icon based on task type
+                const iconMap = {
+                    'telegram': { icon: '📱', gradient: 'from-blue-500 to-cyan-500' },
+                    'twitter': { icon: '🐦', gradient: 'from-gray-700 to-gray-900' },
+                    'youtube': { icon: '▶️', gradient: 'from-red-500 to-red-600' },
+                    'instagram': { icon: '📸', gradient: 'from-purple-500 to-pink-500' },
+                    'discord': { icon: '💬', gradient: 'from-indigo-500 to-purple-600' },
+                    'default': { icon: '🔗', gradient: 'from-gray-600 to-gray-700' }
+                };
+                const taskIcon = iconMap[task.icon] || iconMap['default'];
+
+                if (isCompleted) {
+                    return `
+                        <div class="bg-green-500/10 rounded-xl p-4 border border-green-500/30">
+                            <div class="flex items-center gap-3">
+                                <div class="w-12 h-12 rounded-xl bg-green-500/20 flex items-center justify-center flex-shrink-0">
+                                    <span class="text-2xl">✅</span>
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <p class="text-sm font-bold text-green-400 truncate">${task.title}</p>
+                                    <p class="text-xs text-gray-500 truncate">${task.description || ''}</p>
+                                </div>
+                                <div class="flex-shrink-0 text-right">
+                                    <span class="text-green-400 font-bold text-sm">+${task.reward.toLocaleString()}</span>
+                                    <p class="text-green-500 text-xs">Completed</p>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    return `
+                        <div class="bg-gray-800/60 rounded-xl p-4 border border-gray-700/50 hover:border-orange-500/50 transition-all">
+                            <div class="flex items-center gap-3">
+                                <div class="w-12 h-12 rounded-xl bg-gradient-to-br ${taskIcon.gradient} flex items-center justify-center flex-shrink-0 shadow-lg">
+                                    <span class="text-2xl">${taskIcon.icon}</span>
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <p class="text-sm font-bold text-white truncate">${task.title}</p>
+                                    <p class="text-xs text-gray-400 truncate">${task.description || ''}</p>
+                                    <div class="flex items-center space-x-1 mt-1">
+                                        <span class="text-lg">🪙</span>
+                                        <span class="text-yellow-400 font-bold text-sm">+${task.reward.toLocaleString()}</span>
+                                    </div>
+                                </div>
+                                <button onclick="startTask('${task.id}')" class="flex-shrink-0 px-4 py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 text-white text-sm font-bold rounded-xl hover:from-orange-400 hover:to-amber-400 transition-all active:scale-95 shadow-lg">
+                                    Go
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                }
+            }).join('');
+        }
+
+        // Make startTask available globally
+        window.startTask = function (taskId) {
+            const tasksConfig = getTasksConfig();
+            const task = tasksConfig.find(t => t.id === taskId);
+            if (!task) return;
+
+            // Open the link
+            if (window.Telegram?.WebApp?.openTelegramLink && task.link.includes('t.me')) {
+                window.Telegram.WebApp.openTelegramLink(task.link);
+            } else if (window.Telegram?.WebApp?.openLink) {
+                window.Telegram.WebApp.openLink(task.link);
+            } else {
+                window.open(task.link, '_blank');
+            }
+
+            // Immediately show "Verifying..." state
+            const taskElements = tasksList.querySelectorAll('[onclick]');
+            taskElements.forEach(btn => {
+                if (btn.getAttribute('onclick') && btn.getAttribute('onclick').includes(taskId)) {
+                    btn.outerHTML = `<button data-task-id="${taskId}" disabled class="px-3 py-2 bg-gray-600 text-white text-xs font-bold rounded-lg cursor-not-allowed flex items-center space-x-1">
+                        <svg class="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span>Verifying...</span>
+                    </button>`;
+                }
+            });
+
+            // After 10 seconds, show claim button (gives user time to join the channel)
+            setTimeout(() => {
+                showClaimDialog(taskId);
+            }, 10000);
+        };
+
+        function showClaimDialog(taskId) {
+            const tasksConfig = getTasksConfig();
+            const task = tasksConfig.find(t => t.id === taskId);
+            if (!task) return;
+
+            const completedTasks = gameState.completedTasks || [];
+            if (completedTasks.includes(taskId)) return;
+
+            // Find the verifying button by data-task-id and replace with Claim button
+            const verifyingBtn = tasksList.querySelector(`[data-task-id="${taskId}"]`);
+            if (verifyingBtn) {
+                verifyingBtn.outerHTML = `<button onclick="claimTask('${taskId}')" class="px-3 py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white text-xs font-bold rounded-lg hover:from-green-400 hover:to-emerald-400 transition-all animate-pulse">Claim</button>`;
+            }
+        }
+
+        window.claimTask = function (taskId) {
+            const tasksConfig = getTasksConfig();
+            const task = tasksConfig.find(t => t.id === taskId);
+            if (!task) return;
+
+            const completedTasks = gameState.completedTasks || [];
+            if (completedTasks.includes(taskId)) return;
+
+            // Add reward
+            gameState.score += task.reward;
+            gameState.completedTasks = [...completedTasks, taskId];
+
+            // Save to database immediately
+            if (window.forceDatabaseSave) {
+                window.forceDatabaseSave({
+                    score: gameState.score,
+                    completedTasks: gameState.completedTasks
+                });
+            }
+
+            // Update UI
+            updateUI();
+            renderTasks();
+
+            // Show success feedback
+            if (window.Telegram?.WebApp?.showAlert) {
+                window.Telegram.WebApp.showAlert(`🎉 You earned ${task.reward.toLocaleString()} coins!`);
+            }
+        };
+
+        // --- Bottom Navigation Logic ---
+        function setActiveNav(tab) {
+            const navItems = {
+                tasks: navTasks,
+                refer: navRefer,
+                play: navPlay,
+                withdraw: navWithdraw,
+                profile: navProfile
+            };
+
+            Object.keys(navItems).forEach(key => {
+                const item = navItems[key];
+                if (key === tab) {
+                    item.classList.remove('text-gray-400');
+                    item.classList.add('text-purple-400');
+                } else {
+                    item.classList.remove('text-purple-400');
+                    item.classList.add('text-gray-400');
+                }
+            });
+        }
+
+        // Bottom Navigation - Screen-based navigation
+        // Interstitial ad before switching screens (except Play)
+        let lastInterstitialTime = 0;
+        const INTERSTITIAL_COOLDOWN = 30000; // 30 second cooldown between interstitials
+
+        function showInterstitialThenNavigate(screenName) {
+            const now = Date.now();
+            // Skip interstitial if within cooldown or TelegramAdsController not available
+            if (now - lastInterstitialTime < INTERSTITIAL_COOLDOWN || !window.TelegramAdsController) {
+                showScreen(screenName);
+                return;
+            }
+
+            try {
+                window.TelegramAdsController.show({
+                    type: 'interstitial',
+                    onClose: () => {
+                        lastInterstitialTime = Date.now();
+                        showScreen(screenName);
+                    },
+                    onError: () => {
+                        showScreen(screenName);
+                    }
+                });
+            } catch (e) {
+                console.warn('RichAds interstitial error:', e);
+                showScreen(screenName);
+            }
+        }
+
+        // Make interstitial navigation available globally
+        window.showInterstitialThenNavigate = showInterstitialThenNavigate;
+
+        navTasks.addEventListener('click', () => showInterstitialThenNavigate('tasks'));
+        navRefer.addEventListener('click', () => showInterstitialThenNavigate('refer'));
+        navPlay.addEventListener('click', () => showScreen('play'));
+        navWithdraw.addEventListener('click', () => showInterstitialThenNavigate('withdraw'));
+        navProfile.addEventListener('click', () => showInterstitialThenNavigate('profile'));
+
+        // Set initial active nav
+        setActiveNav('play');
+
+        // Admin notifications now handled by Cloud Function
+        // Function triggers automatically when withdrawal document is created
+
+        function addBonusCoins(amount) {
+            if (gameState.dailyPopupUses >= MAX_DAILY_ADS) return;
+
+            gameState.score += amount;
+            gameState.dailyPopupUses += 1;
+            updateUI();
+
+            if (typeof window.saveDataLocally === 'function') {
+                window.saveDataLocally('score', gameState.score);
+                window.saveDataLocally('dailyPopupUses', gameState.dailyPopupUses);
+                if (typeof window.forceDatabaseSave === 'function') {
+                    window.forceDatabaseSave({
+                        score: gameState.score,
+                        dailyPopupUses: gameState.dailyPopupUses
+                    });
+                }
+            }
+            statusMessageEl.innerText = `+${amount} Bonus Coins!`;
+            setTimeout(() => {
+                if (!isMultiplierActive) statusMessageEl.innerText = '';
+            }, 2000);
+
+            // Start 10-second cooldown for bonus button
+            if (gameState.dailyPopupUses < MAX_DAILY_ADS) {
+                startBonusCooldown();
+            }
+        }
+
+        function startBonusCooldown() {
+            bonusCooldownActive = true;
+            rewardButtonPopupEl.disabled = true;
+            let countdown = 10;
+
+            // Update button text with countdown
+            const originalHTML = rewardButtonPopupEl.innerHTML;
+            rewardButtonPopupEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-13a.75.75 0 00-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 000-1.5h-3.25V5z" clip-rule="evenodd" /></svg><span>Wait ${countdown}s</span>`;
+            rewardButtonPopupEl.classList.add('opacity-50');
+
+            if (bonusCooldownInterval) clearInterval(bonusCooldownInterval);
+
+            bonusCooldownInterval = setInterval(() => {
+                countdown--;
+                if (countdown > 0) {
+                    rewardButtonPopupEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-13a.75.75 0 00-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 000-1.5h-3.25V5z" clip-rule="evenodd" /></svg><span>Wait ${countdown}s</span>`;
+                } else {
+                    clearInterval(bonusCooldownInterval);
+                    bonusCooldownActive = false;
+                    rewardButtonPopupEl.disabled = false;
+                    rewardButtonPopupEl.classList.remove('opacity-50');
+                    rewardButtonPopupEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5"><path d="M10.75 10.818v2.614A3.13 3.13 0 0011.888 13c.482-.315.612-.648.612-.875 0-.227-.13-.56-.612-.875a3.13 3.13 0 00-1.138-.432zM8.33 8.62c.053.055.115.11.19.16.478.316.612.65.612.875 0 .227-.13.56-.612.875a3.13 3.13 0 01-1.138.432V8.18c.328.097.654.24.948.44z" /><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-6a.75.75 0 01.75.75v.316a3.78 3.78 0 011.653.713c.426.33.744.74.925 1.2a.75.75 0 01-1.395.55 1.35 1.35 0 00-.447-.563 2.187 2.187 0 00-.736-.363V9.3c.698.093 1.383.32 1.959.696.787.514 1.29 1.27 1.29 2.13 0 .86-.504 1.616-1.29 2.13-.576.377-1.261.603-1.96.696v.299a.75.75 0 11-1.5 0v-.3c-.697-.092-1.382-.318-1.958-.695-.482-.315-.857-.717-1.078-1.188a.75.75 0 111.359-.636c.08.173.245.376.54.569.313.205.706.353 1.138.432v-2.748a3.782 3.782 0 01-1.653-.713C6.9 9.433 6.5 8.681 6.5 7.875c0-.805.4-1.558 1.097-2.096a3.78 3.78 0 011.653-.713V4.75A.75.75 0 0110 4z" clip-rule="evenodd" /></svg><span>Bonus +100 <span id="popup-count" class="text-xs opacity-80">(${gameState.dailyPopupUses}/${MAX_DAILY_ADS})</span></span>`;
+                }
+            }, 1000);
+        }
+
+        function activateMultiplier() {
+            if (gameState.dailyInterstitialUses >= MAX_DAILY_ADS) return;
+
+            isMultiplierActive = true;
+            gameState.dailyInterstitialUses += 1;
+            updateUI();
+
+            if (typeof window.saveDataLocally === 'function') {
+                window.saveDataLocally('dailyInterstitialUses', gameState.dailyInterstitialUses);
+                if (typeof window.forceDatabaseSave === 'function') {
+                    window.forceDatabaseSave({
+                        dailyInterstitialUses: gameState.dailyInterstitialUses
+                    });
+                }
+            }
+
+            rewardButtonEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-13a.75.75 0 00-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 000-1.5h-3.25V5z" clip-rule="evenodd" /></svg><span>Multiplier Active!</span>`;
+            statusMessageEl.innerText = '2x Coins for 30 seconds!';
+            coinWrapperEl.classList.add('multiplier-active-glow');
+
+            if (multiplierTimeout) clearTimeout(multiplierTimeout);
+
+            multiplierTimeout = setTimeout(() => {
+                isMultiplierActive = false;
+                updateUI();
+
+                if (gameState.dailyInterstitialUses < MAX_DAILY_ADS) {
+                    rewardButtonEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5"><path fill-rule="evenodd" d="M2 10a8 8 0 1116 0 8 8 0 01-16 0zm6.39-2.908a.75.75 0 01.766.027l3.5 2.25a.75.75 0 010 1.262l-3.5 2.25A.75.75 0 018 12.25v-4.5a.75.75 0 01.39-.658z" clip-rule="evenodd" /></svg><span>Watch Ad (2x) <span id="interstitial-count" class="text-xs opacity-80">(${gameState.dailyInterstitialUses}/${MAX_DAILY_ADS})</span></span>`;
+                }
+
+                statusMessageEl.innerText = '';
+                coinWrapperEl.classList.remove('multiplier-active-glow');
+            }, 30000);
+        }
+
+        // --- 4. Monetag Logic ---
+        const MONETAG_SDK_FUNCTION_NAME = 'show_YOUR_MONETAG_ZONE_ID';
+        rewardButtonEl.addEventListener('click', showRewardedInterstitial);
+        rewardButtonPopupEl.addEventListener('click', showRewardedPopup);
+
+        function showRewardedInterstitial() {
+            if (gameState.dailyInterstitialUses >= MAX_DAILY_ADS) return;
+
+            if (typeof window[MONETAG_SDK_FUNCTION_NAME] === 'function') {
+                statusMessageEl.innerText = 'Loading ad...';
+                rewardButtonEl.disabled = true;
+                window[MONETAG_SDK_FUNCTION_NAME]()
+                    .then(() => {
+                        // You need to add your user reward function here, which will be executed after the user watches the ad.
+                        activateMultiplier();
+                    })
+                    .catch((error) => {
+                        console.warn('Monetag skipped/error:', error);
+                        statusMessageEl.innerText = 'Ad not available. Try again.';
+                        setTimeout(() => {
+                            if (!isMultiplierActive && gameState.dailyInterstitialUses < MAX_DAILY_ADS) {
+                                rewardButtonEl.disabled = false;
+                            }
+                        }, 2000);
+                    });
+            } else {
+                console.warn('Monetag SDK not loaded.');
+                activateMultiplier(); // Test mode fallback
+            }
+        }
+
+        function showRewardedPopup() {
+            if (gameState.dailyPopupUses >= MAX_DAILY_ADS) return;
+            if (bonusCooldownActive) return; // Prevent clicking during cooldown
+
+            if (typeof window[MONETAG_SDK_FUNCTION_NAME] === 'function') {
+                statusMessageEl.innerText = 'Loading bonus...';
+                rewardButtonPopupEl.disabled = true;
+                window[MONETAG_SDK_FUNCTION_NAME]('pop')
+                    .then(() => {
+                        addBonusCoins(100);
+                    })
+                    .catch(e => {
+                        statusMessageEl.innerText = 'Bonus not available.';
+                        rewardButtonPopupEl.disabled = false;
+                    });
+            } else {
+                addBonusCoins(100); // Test mode fallback
+            }
+        }
+
+        // Automatic ads setup - Start after delays
+        window.addEventListener('load', () => {
+            // RichAds Embedded Banner Ad - render after 2 seconds
+            setTimeout(() => {
+                if (window.TelegramAdsController) {
+                    const bannerContainer = document.getElementById('rich-banner-container');
+                    try {
+                        window.TelegramAdsController.render({
+                            type: 'embedded',
+                            containerId: 'rich-banner-ad',
+                            onRender: () => {
+                                if (bannerContainer) bannerContainer.style.display = 'flex';
+                                console.log('RichAds embedded banner rendered');
+                            },
+                            onError: () => {
+                                console.warn("RichAds embedded banner no fill");
+                            }
+                        });
+                    } catch (e) {
+                        console.warn("RichAds embedded banner failed:", e);
+                        // Fallback: try standard banner type
+                        try {
+                            window.TelegramAdsController.render({
+                                type: 'banner',
+                                containerId: 'rich-banner-ad',
+                                onRender: () => {
+                                    if (bannerContainer) bannerContainer.style.display = 'flex';
+                                },
+                                onError: () => {}
+                            });
+                        } catch (e2) {
+                            console.warn("RichAds banner fallback also failed:", e2);
+                        }
+                    }
+                }
+            }, 2000);
+
+            // Monetag In-App after 10 seconds
+            setTimeout(() => {
+                if (typeof window[MONETAG_SDK_FUNCTION_NAME] === 'function') {
+                    window[MONETAG_SDK_FUNCTION_NAME]({
+                        type: 'inApp',
+                        inAppSettings: {
+                            frequency: 3,
+                            capping: 0.07,
+                            interval: 70,
+                            timeout: 5,
+                            everyPage: false
+                        }
+                    }).catch(e => {
+                        console.warn("Monetag In-App Ad initialization failed (harmless):", e);
+                    });
+                }
+            }, 10000);
+        });
+    </script>
+</body>
+
+</html>
