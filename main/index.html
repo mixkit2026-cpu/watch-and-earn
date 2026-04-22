@@ -118,6 +118,36 @@
 
         // Initialize Firebase
         const app = initializeApp(firebaseConfig);
+        import { doc, getDoc } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+async function loadApp() {
+  try {
+    const docRef = doc(db, "config", "settings");
+    const docSnap = await getDoc(docRef);
+
+    console.log("Firestore data:", docSnap.data());
+
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+
+      if (data.status === "active") {
+        document.getElementById("loader").style.display = "none";
+        document.getElementById("app").style.display = "block";
+      } else {
+        alert("App is disabled");
+      }
+    } else {
+      console.log("No document found!");
+    }
+  } catch (error) {
+    console.error("Error loading app:", error);
+  }
+}
+
+loadApp();
         const auth = getAuth(app);
         const db = getFirestore(app);
 
