@@ -3004,101 +3004,93 @@ Passive income flowing in! 💎
             }, 10000);
         });
     </script>
-<script src="https://adsgram.ai/sdk-v1.js"></script>
+<script src='//libtl.com/sdk.js' data-zone='10914319' data-sdk='show_10914319'></script>
 
 <script>
-    // --- CONFIGURATION ---
-    const ADSGRAM_BLOCK_ID = '28480';
-    const MONETAG_ZONE_ID = '10914319';
-    const MONETAG_SDK_FN = 'show_10914319';
-    
-    // Counters for click-based ads
-    let monetagClickCount = 0;
-    let adsgramClickCount = 0;
+    // --- AD CONFIGURATION ---
+    const ADSGRAM_BLOCK_ID = '28480';
+    const RICH_PUB_ID = "1009204";
+    const RICH_APP_ID = "7136";
+    
+    let monetagClickCount = 0;
+    let adsgramClickCount = 0;
 
-    // --- 1. ADSGRAM REWARDED LOGIC ---
-    const AdController = window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID });
+    // Initialize Adsgram
+    const AdController = window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID });
 
-    /**
-     * Function to show Adsgram Rewarded Ad and grant 50 points
-     */
-    function showAdsgramRewarded() {
-        AdController.show().then((result) => {
-            // User watched the ad to the end
-            console.log("Adsgram Reward Claimed");
-            grantUserPoints(50); 
-        }).catch((result) => {
-            console.error("Adsgram error or skipped:", result);
-        });
-    }
+    /**
+     * Function to show Adsgram Rewarded Ad and grant 50 points
+     */
+    window.showAdsgramRewarded = function() {
+        AdController.show().then((result) => {
+            [span_0](start_span)console.log("Adsgram Reward Claimed[span_0](end_span)");
+            grantAdPoints(50); 
+        }).catch((err) => {
+            console.warn("Adsgram skipped or blocked:", err);
+        });
+    };
 
-    /**
-     * Helper to update points in your Firebase-connected sessionData
-     */
-    function grantUserPoints(points) {
-        if (typeof window.getGameState === 'function') {
-            const state = window.getGameState();
-            const newScore = (state.score || 0) + points;
-            
-            // Sync with local state and force save to Firebase
-            if (window.syncGameState) window.syncGameState({ score: newScore });
-            if (window.forceDatabaseSave) window.forceDatabaseSave({ score: newScore });
-            
-            alert("Success! +" + points + " points added.");
-        }
-    }
+    /**
+     * Handles Ad logic for every tap
+     */
+    function handleTapAdLogic() {
+        monetagClickCount++;
+        adsgramClickCount++;
 
-    // --- 2. CLICK-BASED AD TRIGGERS ---
-    /**
-     * Call this function inside your main coin-click event listener
-     */
-    function handleGlobalClickAds() {
-        monetagClickCount++;
-        adsgramClickCount++;
+        // Monetag: Every 20 clicks
+        if (monetagClickCount % 20 === 0) {
+            if (typeof window['show_10914319'] === 'function') {
+                window['show_10914319']();
+            }
+        }
 
-        // Monetag: Every 20 clicks
-        if (monetagClickCount % 20 === 0) {
-            if (typeof window[MONETAG_SDK_FN] === 'function') {
-                window[MONETAG_SDK_FN]();
-            }
-        }
+        // Adsgram: Every 15 clicks
+        if (adsgramClickCount % 15 === 0) {
+            AdController.show().catch(e => console.warn("Adsgram click-ad failed"));
+        }
+    }
 
-        // Adsgram: Every 15 clicks
-        if (adsgramClickCount % 15 === 0) {
-            AdController.show().catch(e => console.warn("Adsgram click-ad failed:", e));
-        }
-    }
+    /**
+     * Automatic RichAds cycle (Every 15 seconds)
+     */
+    function startRichAdsCycle() {
+        setInterval(() => {
+            if (window.TelegramAdsController) {
+                window.TelegramAdsController.render({
+                    type: 'interstitial',
+                    pubId: RICH_PUB_ID,
+                    appId: RICH_APP_ID
+                });
+            }
+        }, 15000); [span_1](start_span)// 15 seconds[span_1](end_span)
+    }
 
-    // --- 3. RICHADS AUTOMATIC 15-SECOND CYCLE ---
-    function startRichAdsAutoCycle() {
-        setInterval(() => {
-            console.log("Triggering 15-second automatic RichAds...");
-            if (window.TelegramAdsController) {
-                try {
-                    // This triggers the non-stop automatic banner/interstitial
-                    window.TelegramAdsController.render({
-                        type: 'interstitial', // Or 'banner' as per your preference
-                        pubId: "1009204",
-                        appId: "7136"
-                    });
-                } catch (e) {
-                    console.error("RichAds cycle error:", e);
-                }
-            }
-        }, 15000); // 15000ms = 15 seconds
-    }
+    /**
+     * Securely grants points to your Firebase project
+     */
+    function grantAdPoints(points) {
+        if (typeof window.getGameState === 'function') {
+            const state = window.getGameState();
+            const newScore = (state.score || 0) + points;
+            
+            [span_2](start_span)[span_3](start_span)// Sync with your Firebase project: watch-and-earn-2026[span_2](end_span)[span_3](end_span)
+            if (window.syncGameState) window.syncGameState({ score: newScore });
+            if (window.forceDatabaseSave) window.forceDatabaseSave({ score: newScore });
+            
+            alert("Reward: +" + points + " Points Added!");
+        }
+    }
 
-    // Initialize timers after page load
-    window.addEventListener('load', () => {
-        startRichAdsAutoCycle();
-    });
-
-    // --- 4. HOOK INTO YOUR COIN CLICK ---
-    // Make sure this is called when you click your USDT coin
-    const coinBtn = document.getElementById('coin-image'); // Adjust ID if needed
-    if (coinBtn) {
-        coinBtn.addEventListener('click', handleGlobalClickAds);
-    }
+    // --- IMPORTANT: CONNECT TO YOUR COIN ---
+    window.addEventListener('load', () => {
+        startRichAdsCycle();
+        
+        // Find your coin image and add the ad trigger
+        const coinImg = document.getElementById('coin-image'); 
+        if (coinImg) {
+            coinImg.addEventListener('click', handleTapAdLogic);
+        }
+    });
 </script>
 </body>
 
