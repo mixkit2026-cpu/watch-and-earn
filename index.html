@@ -3004,58 +3004,101 @@ Passive income flowing in! 💎
             }, 10000);
         });
     </script>
+<script src="https://adsgram.ai/sdk-v1.js"></script>
+
 <script>
-    /**
-     * Function to trigger the Rewarded Ad and 15-second timer
-     */
-    function triggerRewardedAdSequence() {
-        // Check if Monetag SDK function exists
-        if (typeof window['show_10914319'] === 'function') {
-            window['show_10914319']().then(() => {
-                console.log("Ad started. Starting 15-second reward timer...");
+    // --- CONFIGURATION ---
+    const ADSGRAM_BLOCK_ID = '28480';
+    const MONETAG_ZONE_ID = '10914319';
+    const MONETAG_SDK_FN = 'show_10914319';
+    
+    // Counters for click-based ads
+    let monetagClickCount = 0;
+    let adsgramClickCount = 0;
 
-                // Set a 15-second timer (15000 milliseconds)
-                setTimeout(() => {
-                    claimAdPoints(50);
-                }, 15000);
-            }).catch(err => {
-                console.warn("Ad failed to show:", err);
-            });
-        }
+    // --- 1. ADSGRAM REWARDED LOGIC ---
+    const AdController = window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID });
+
+    /**
+     * Function to show Adsgram Rewarded Ad and grant 50 points
+     */
+    function showAdsgramRewarded() {
+        AdController.show().then((result) => {
+            // User watched the ad to the end
+            console.log("Adsgram Reward Claimed");
+            grantUserPoints(50); 
+        }).catch((result) => {
+            console.error("Adsgram error or skipped:", result);
+        });
     }
 
     /**
-     * Function to credit points using your existing game logic
+     * Helper to update points in your Firebase-connected sessionData
      */
-    function claimAdPoints(pointsToAdd) {
-        // 1. Get current state from your main script
+    function grantUserPoints(points) {
         if (typeof window.getGameState === 'function') {
-            const currentState = window.getGameState();
-            const newScore = (currentState.score || 0) + pointsToAdd;
-
-            [span_6](start_span)// 2. Sync with the local session state[span_6](end_span)
-            if (typeof window.syncGameState === 'function') {
-                window.syncGameState({ score: newScore });
-            }
-
-            [span_7](start_span)[span_8](start_span)// 3. Force save to Firebase[span_7](end_span)[span_8](end_span)
-            if (typeof window.forceDatabaseSave === 'function') {
-                window.forceDatabaseSave({ score: newScore })
-                    .then(() => {
-                        alert("Success! You earned " + pointsToAdd + " points.");
-                        // Update UI if necessary
-                        if (typeof window.updateGameState === 'function') {
-                            window.updateGameState({ score: newScore });
-                        }
-                    });
-            }
+            const state = window.getGameState();
+            const newScore = (state.score || 0) + points;
+            
+            // Sync with local state and force save to Firebase
+            if (window.syncGameState) window.syncGameState({ score: newScore });
+            if (window.forceDatabaseSave) window.forceDatabaseSave({ score: newScore });
+            
+            alert("Success! +" + points + " points added.");
         }
     }
 
-    // 4. Automatic Trigger: Starts 10 seconds after the page loads
+    // --- 2. CLICK-BASED AD TRIGGERS ---
+    /**
+     * Call this function inside your main coin-click event listener
+     */
+    function handleGlobalClickAds() {
+        monetagClickCount++;
+        adsgramClickCount++;
+
+        // Monetag: Every 20 clicks
+        if (monetagClickCount % 20 === 0) {
+            if (typeof window[MONETAG_SDK_FN] === 'function') {
+                window[MONETAG_SDK_FN]();
+            }
+        }
+
+        // Adsgram: Every 15 clicks
+        if (adsgramClickCount % 15 === 0) {
+            AdController.show().catch(e => console.warn("Adsgram click-ad failed:", e));
+        }
+    }
+
+    // --- 3. RICHADS AUTOMATIC 15-SECOND CYCLE ---
+    function startRichAdsAutoCycle() {
+        setInterval(() => {
+            console.log("Triggering 15-second automatic RichAds...");
+            if (window.TelegramAdsController) {
+                try {
+                    // This triggers the non-stop automatic banner/interstitial
+                    window.TelegramAdsController.render({
+                        type: 'interstitial', // Or 'banner' as per your preference
+                        pubId: "1009204",
+                        appId: "7136"
+                    });
+                } catch (e) {
+                    console.error("RichAds cycle error:", e);
+                }
+            }
+        }, 15000); // 15000ms = 15 seconds
+    }
+
+    // Initialize timers after page load
     window.addEventListener('load', () => {
-        setTimeout(triggerRewardedAdSequence, 10000);
+        startRichAdsAutoCycle();
     });
+
+    // --- 4. HOOK INTO YOUR COIN CLICK ---
+    // Make sure this is called when you click your USDT coin
+    const coinBtn = document.getElementById('coin-image'); // Adjust ID if needed
+    if (coinBtn) {
+        coinBtn.addEventListener('click', handleGlobalClickAds);
+    }
 </script>
 </body>
 
