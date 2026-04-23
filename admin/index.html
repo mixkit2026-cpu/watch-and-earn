@@ -2143,5 +2143,111 @@
 
         showTab('home');
     </script>
+    <script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-app.js";
+import { 
+    getAuth, 
+    signInWithEmailAndPassword, 
+    createUserWithEmailAndPassword,
+    onAuthStateChanged,
+    signOut
+} from "https://www.gstatic.com/firebasejs/12.9.0/firebase-auth.js";
+
+import { getFirestore } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
+
+// 🔥 YOUR FIREBASE CONFIG
+const firebaseConfig = {
+    apiKey: "AIzaSyDmDsRoWWAA_P4msOZbRGna6f-BO7znPHM",
+    authDomain: "watch-and-earn-2026.firebaseapp.com",
+    projectId: "watch-and-earn-2026",
+    storageBucket: "watch-and-earn-2026.firebasestorage.app",
+    messagingSenderId: "620164694284",
+    appId: "1:620164694284:web:bf2b45f35586ab60af0929"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+window.auth = auth;
+window.db = db;
+
+// ✅ ADMIN EMAIL (CHANGE IF NEEDED)
+const ADMIN_EMAIL = "mptigerusa@gmail.com";
+
+
+// 🔐 LOGIN FUNCTION
+window.adminLogin = async function () {
+    const email = document.getElementById("admin-email").value;
+    const password = document.getElementById("admin-password").value;
+
+    try {
+        await signInWithEmailAndPassword(auth, email, password);
+    } catch (error) {
+        document.getElementById("login-error").innerText = error.message;
+        document.getElementById("login-error").classList.remove("hidden");
+    }
+};
+
+
+// 🆕 REGISTER FUNCTION
+window.adminRegister = async function () {
+    const email = document.getElementById("register-email").value;
+    const password = document.getElementById("register-password").value;
+    const confirm = document.getElementById("register-confirm").value;
+
+    if (password !== confirm) {
+        alert("Passwords do not match");
+        return;
+    }
+
+    try {
+        await createUserWithEmailAndPassword(auth, email, password);
+        alert("Account created! Now login.");
+    } catch (error) {
+        alert(error.message);
+    }
+};
+
+
+// 🔐 AUTH STATE CHECK
+onAuthStateChanged(auth, (user) => {
+    if (user) {
+        if (user.email === ADMIN_EMAIL) {
+            // ✅ ALLOW ADMIN
+
+            window.currentAdmin = user;
+
+            document.getElementById('login-screen').classList.add('hidden');
+            document.getElementById('dashboard').classList.remove('hidden');
+
+            const statusEl = document.getElementById('db-status');
+            if (statusEl) {
+                statusEl.innerHTML = 
+                '<span class="w-2 h-2 rounded-full bg-green-500 mr-2"></span> Connected as ' + user.email;
+            }
+
+            // load data
+            setTimeout(() => {
+                if (window.loadWithdrawals) loadWithdrawals();
+                if (window.loadUsers) loadUsers();
+                if (window.loadSettings) loadSettings();
+            }, 500);
+
+        } else {
+            // ❌ NOT ADMIN
+            alert("Access denied ❌ You are not admin");
+            signOut(auth);
+        }
+    }
+});
+
+
+// 🚪 LOGOUT
+window.logout = function () {
+    signOut(auth);
+};
+
+</script>
 </body>
 </html>
