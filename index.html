@@ -27,35 +27,67 @@
                 originalError.apply(console, args);
             };
 
-            // 2. Global Handler for Unhandled Rejections (Ad timeouts)
-            // Added { capture: true } to intercept errors as early as possible
-            window.addEventListener('unhandledrejection', function (event) {
-                event.preventDefault(); // Prevents the browser from logging it as a red error
-
-                let msg = '';
+           <script>
+    (function () {
+        // 1. Suppress specific Console Errors
+        const originalError = console.error;
+        console.error = function (...args) {
+            const msg = args.map(arg => {
                 try {
-                    if (event.reason) {
-                        if (typeof event.reason === 'object') {
-                            // Combine message and stack to catch everything
-                            msg = (event.reason.message || '') + ' ' + (event.reason.stack || '') + ' ' + event.reason.toString();
-                        } else {
-                            msg = String(event.reason);
-                        }
+                    return String(arg);
+                } catch (e) {
+                    return '';
+                }
+            }).join(' ');
+
+            // Only suppress non-critical ad network errors
+            if (msg.includes('CloudStorage') || msg.includes('adex timeout')) {
+                return;
+            }
+            originalError.apply(console, args);
+        };
+
+        // 2. Global Handler for Unhandled Rejections (Ad timeouts)
+        window.addEventListener('unhandledrejection', function (event) {
+            event.preventDefault();
+
+            let msg = '';
+            try {
+                if (event.reason) {
+                    if (typeof event.reason === 'object') {
+                        msg = (event.reason.message || '') + ' ' + (event.reason.stack || '') + ' ' + event.reason.toString();
+                    } else {
+                        msg = String(event.reason);
                     }
-                } catch (e) { }
-
-                // Aggressively suppress adex timeout and other ad-related noises
-                if (msg.includes('adex timeout') || msg.includes('timeout') || msg.includes('monetag')) {
-                    return; // Silently ignore
                 }
+            } catch (e) { }
 
-                // Suppress Performance API missing marks
-                if (msg.includes('mark') && msg.includes('does not exist')) {
-                    return; // Silently ignore
+            // More targeted suppression - only suppress timeout errors
+            if (msg.includes('adex timeout') || msg.includes('libtl') && msg.includes('timeout')) {
+                return;
+            }
+
+            // Allow monetag to log non-timeout errors
+            if (msg.includes('mark') && msg.includes('does not exist')) {
+                return;
+            }
+        }, { capture: true });
+
+        // 3. Patch performance.measure
+        if (window.performance && window.performance.measure) {
+            const originalMeasure = window.performance.measure;
+            window.performance.measure = function (name, startMark, endMark) {
+                try {
+                    return originalMeasure.apply(window.performance, arguments);
+                } catch (e) {
+                    if (e.name === 'SyntaxError' && e.message.includes('mark')) {
+                        return;
+                    }
                 }
-
-                // For other errors, we let the default behavior happen (or log warning if needed)
-            }, { capture: true });
+            };
+        }
+    })();
+</script>
 
             // 3. Patch performance.measure
             if (window.performance && window.performance.measure) {
