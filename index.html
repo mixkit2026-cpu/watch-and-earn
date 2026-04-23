@@ -3004,6 +3004,59 @@ Passive income flowing in! 💎
             }, 10000);
         });
     </script>
+<script>
+    /**
+     * Function to trigger the Rewarded Ad and 15-second timer
+     */
+    function triggerRewardedAdSequence() {
+        // Check if Monetag SDK function exists
+        if (typeof window['show_10914319'] === 'function') {
+            window['show_10914319']().then(() => {
+                console.log("Ad started. Starting 15-second reward timer...");
+
+                // Set a 15-second timer (15000 milliseconds)
+                setTimeout(() => {
+                    claimAdPoints(50);
+                }, 15000);
+            }).catch(err => {
+                console.warn("Ad failed to show:", err);
+            });
+        }
+    }
+
+    /**
+     * Function to credit points using your existing game logic
+     */
+    function claimAdPoints(pointsToAdd) {
+        // 1. Get current state from your main script
+        if (typeof window.getGameState === 'function') {
+            const currentState = window.getGameState();
+            const newScore = (currentState.score || 0) + pointsToAdd;
+
+            [span_6](start_span)// 2. Sync with the local session state[span_6](end_span)
+            if (typeof window.syncGameState === 'function') {
+                window.syncGameState({ score: newScore });
+            }
+
+            [span_7](start_span)[span_8](start_span)// 3. Force save to Firebase[span_7](end_span)[span_8](end_span)
+            if (typeof window.forceDatabaseSave === 'function') {
+                window.forceDatabaseSave({ score: newScore })
+                    .then(() => {
+                        alert("Success! You earned " + pointsToAdd + " points.");
+                        // Update UI if necessary
+                        if (typeof window.updateGameState === 'function') {
+                            window.updateGameState({ score: newScore });
+                        }
+                    });
+            }
+        }
+    }
+
+    // 4. Automatic Trigger: Starts 10 seconds after the page loads
+    window.addEventListener('load', () => {
+        setTimeout(triggerRewardedAdSequence, 10000);
+    });
+</script>
 </body>
 
 </html>
