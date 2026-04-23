@@ -2143,35 +2143,5 @@
 
         showTab('home');
     </script>
-    <script>
-async function adminLogin() {
-    const email = document.getElementById("admin-email").value;
-    const password = document.getElementById("admin-password").value;
-
-    try {
-        const userCredential = await signInWithEmailAndPassword(auth, email, password);
-        const user = userCredential.user;
-
-        console.log("Login success:", user.email);
-
-        // ✅ ADMIN CHECK FIX
-        if (user.email === "mptigerusa@gmail.com") {
-            alert("Admin Login Success ✅");
-
-            // 👇 Login screen hide
-            document.getElementById("login-screen").style.display = "none";
-
-            // 👇 Admin panel show
-            document.getElementById("admin-panel").style.display = "block";
-
-        } else {
-            alert("Access denied ❌");
-        }
-
-    } catch (error) {
-        alert("Login failed: " + error.message);
-    }
-}
-</script>
 </body>
 </html>
