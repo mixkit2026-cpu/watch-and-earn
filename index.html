@@ -751,12 +751,12 @@ Passive income flowing in! 💎
                 const settingsDoc = await getDoc(settingsRef);
 
                 let minCoins = 50000;
-                let usdValue = 0.10;
+                let usdValue = 0.5;
 
                 if (settingsDoc.exists()) {
                     const data = settingsDoc.data();
                     minCoins = data.minCoins || 50000;
-                    usdValue = data.usdValue || 0.10;
+                    usdValue = data.usdValue || 0.50;
 
                     if (typeof window.updateWithdrawSettings === 'function') {
                         window.updateWithdrawSettings(minCoins, usdValue);
