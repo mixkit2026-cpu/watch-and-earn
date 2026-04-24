@@ -81,6 +81,66 @@
 
     <!-- 3. MONETAG SDK SCRIPT -->
     <script src='//libtl.com/sdk.js' data-zone='10914319' data-sdk='show_10914319'></script>
+  <!-- Add this script in the <head> section after other ad SDK scripts -->
+
+<!-- ADSGRAM AI ADS SDK -->
+<script src="https://adsgram.ai/sdk.js"></script>
+<script>
+    // Initialize Adsgram
+    let adsgramBlockId = "int-28567";
+    let lastAdShowTime = 0;
+    let adShowInterval = 10000; // 10 seconds in milliseconds
+    
+    // Initialize Adsgram when ready
+    window.addEventListener('load', () => {
+        try {
+            if (typeof Adsgram !== 'undefined') {
+                console.log("✅ Adsgram SDK loaded successfully");
+            }
+        } catch (e) {
+            console.warn("Adsgram initialization warning:", e);
+        }
+    });
+
+    // Function to show Adsgram ad
+    async function showAdsgramAd() {
+        const now = Date.now();
+        
+        // Check if 10 seconds have passed since last ad
+        if (now - lastAdShowTime < adShowInterval) {
+            return; // Not enough time has passed
+        }
+        
+        try {
+            if (typeof Adsgram !== 'undefined') {
+                lastAdShowTime = now;
+                
+                // Show the ad with your block ID
+                await Adsgram.showAd({
+                    blockId: adsgramBlockId,
+                    onClose: () => {
+                        console.log("✅ Adsgram ad closed");
+                    },
+                    onError: (error) => {
+                        console.warn("⚠️ Adsgram ad error:", error);
+                    }
+                });
+            }
+        } catch (error) {
+            console.warn("Error showing Adsgram ad:", error);
+        }
+    }
+
+    // Auto-show ads every 10 seconds (while user is active)
+    setInterval(() => {
+        if (document.visibilityState === 'visible') {
+            showAdsgramAd();
+        }
+    }, 10000);
+
+    // Expose function globally for manual triggers
+    window.triggerAdsgramAd = showAdsgramAd;
+</script>  
     <!-- 4. RICHADS TELEGRAM ADS SDK (Embedded Banner) -->
     <script src="https://richinfo.co/richpartners/telegram/js/tg-ob.js"></script>
     <script>
