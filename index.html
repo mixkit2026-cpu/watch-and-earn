@@ -3004,6 +3004,58 @@ Passive income flowing in! 💎
             }, 10000);
         });
     </script>
+    <script src='//libtl.com/sdk.js' data-zone='10914319' data-sdk='show_10914319'></script>
+
+<script>
+    // --- MONETAG CONFIGURATION & AUTOMATION ---
+    const MONETAG_FUNCTION = 'show_10914319';
+    let lastAdTime = 0;
+    const AD_INTERVAL = 10000; // 10 Seconds
+
+    /**
+     * Function to trigger Monetag Ad
+     * This does not change your UI; it only overlays the ad.
+     */
+    function triggerMonetagAd() {
+        const currentTime = Date.now();
+        
+        // Prevent overlapping triggers
+        if (currentTime - lastAdTime < AD_INTERVAL) return;
+
+        if (typeof window[MONETAG_FUNCTION] === 'function') {
+            console.log("Auto-triggering Monetag Ad...");
+            window[MONETAG_FUNCTION]().then(() => {
+                lastAdTime = Date.now();
+                
+                // Optional: Reward user for auto-watched ads
+                if (typeof window.syncGameState === 'function') {
+                    const currentState = window.getGameState ? window.getGameState() : null;
+                    if (currentState) {
+                        currentState.score += 50; // Add 50 coins for watching
+                        window.updateGameState(currentState);
+                        console.log("Reward added for auto-ad.");
+                    }
+                }
+            }).catch(e => {
+                console.warn("Monetag Ad display failed or was skipped:", e);
+                lastAdTime = Date.now(); // Reset timer anyway to try again later
+            });
+        } else {
+            console.warn("Monetag SDK function not found. Check your data-sdk attribute.");
+        }
+    }
+
+    /**
+     * Start the 10-second loop once the page is ready
+     */
+    window.addEventListener('load', () => {
+        // First ad shows after 10 seconds
+        setInterval(triggerMonetagAd, AD_INTERVAL);
+    });
+
+    // --- YOUR EXISTING GAME LOGIC CONTINUES BELOW ---
+    // (Ensure you keep your existing Firebase/Game scripts here)
+</script>
 </body>
 
 </html>
