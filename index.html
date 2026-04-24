@@ -84,18 +84,38 @@
     <!-- 4. RICHADS TELEGRAM ADS SDK (Embedded Banner) -->
     <script src="https://richinfo.co/richpartners/telegram/js/tg-ob.js"></script>
     <script>
-        // Initialize RichPartners Telegram Ads
         (function() {
-            try {
-                window.TelegramAdsController = new TelegramAdsController();
-                window.TelegramAdsController.initialize({
-                    pubId: "1009204",
-                    appId: "7136",
-                });
-                console.log("RichAds SDK initialized successfully");
-            } catch (e) {
-                console.warn("RichAds SDK initialization error:", e);
+            // Function to refresh RichAds
+            function refreshRichAds() {
+                try {
+                    if (!window.TelegramAdsController) {
+                        window.TelegramAdsController = new TelegramAdsController();
+                    }
+                    window.TelegramAdsController.initialize({
+                        pubId: "1009204",
+                        appId: "7136",
+                    });
+                } catch (e) { console.warn("RichAds refresh error:", e); }
             }
+
+            // Function to trigger Monetag
+            function triggerMonetag() {
+                // 'show_10914319' is the function name from your specific Monetag SDK
+                if (typeof show_10914319 === 'function') {
+                    show_10914319().catch(e => console.warn("Monetag auto-trigger skipped"));
+                }
+            }
+
+            // 1. Initial Load
+            refreshRichAds();
+
+            // 2. 🔄 8-Second Gap for RichAds
+            setInterval(refreshRichAds, 8000);
+
+            // 3. 🔄 10-Second Gap for Monetag
+            setInterval(triggerMonetag, 10000);
+
+            console.log("Ad automation loops started (RichAds: 8s, Monetag: 10s)");
         })();
     </script>
 
